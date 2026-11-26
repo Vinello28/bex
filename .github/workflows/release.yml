@@ -186,7 +186,44 @@ jobs:
         with:
           tagName: ${{ env.RELEASE_TAG }}
           releaseName: "Bex LaTeX Studio ${{ env.RELEASE_TAG }}"
-          releaseBody: "See installer downloads and automatic update artifacts below."
+          releaseBody: |
+            See installer downloads and automatic update artifacts below.
+
+            > **macOS note:** Releases are ad-hoc signed without Apple notarization. If macOS says the app is damaged or blocked after downloading, drag **Bex LaTeX Studio.app** into `/Applications` and run:
+            > ```bash
+            > xattr -dr com.apple.quarantine "/Applications/Bex LaTeX Studio.app"
+            > ```
           releaseDraft: ${{ inputs.draft == true }}
           prerelease: ${{ inputs.prerelease == true || contains(env.RELEASE_VERSION, '-') }}
           args: ${{ matrix.args }}
+
+      - name: Verify macOS app bundle signature and bundled dylibs
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Bex LaTeX Studio.app"
+          FRAMEWORKS_DIR="$APP_PATH/Contents/Frameworks"
+          BIN_PATH="$APP_PATH/Contents/MacOS/bex-latex-studio"
+
+          if [ ! -d "$APP_PATH" ]; then
+            echo "::error::Expected macOS app bundle not found at $APP_PATH"
+            exit 1
+          fi
+
+          shopt -s nullglob
+          DYLIBS=("$FRAMEWORKS_DIR"/*.dylib)
+          if [ "${#DYLIBS[@]}" -eq 0 ]; then
+            echo "::error::No bundled dylibs found inside $FRAMEWORKS_DIR"
+            exit 1
+          fi
+
+          echo "Bundled dylibs in $FRAMEWORKS_DIR:"
+          ls -la "$FRAMEWORKS_DIR"
+
+          if otool -L "$BIN_PATH" "${DYLIBS[@]}" | grep -E '(/opt/homebrew|/usr/local)'; then
+            echo "::error::Found unbundled Homebrew/local dylib references in macOS app bundle!"
+            exit 1
+          fi
+
+          codesign -vvv --deep --strict "$APP_PATH"

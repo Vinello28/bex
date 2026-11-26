@@ -61,6 +61,17 @@ To build production installers locally:
 npm run tauri build
 ```
 
+## Installing on macOS (Unsigned / Ad-hoc Signed Releases)
+
+Pre-built macOS `.dmg` releases are ad-hoc signed (`signingIdentity: "-"`) and are **not** notarized with an Apple Developer ID certificate. Because browsers attach `com.apple.quarantine` to downloaded installers, macOS Gatekeeper on Apple Silicon may show *"Bex LaTeX Studio is damaged and can't be opened"* when launching the downloaded app.
+
+After dragging **Bex LaTeX Studio.app** from the `.dmg` into `/Applications`, remove the quarantine attribute once in Terminal:
+```bash
+xattr -dr com.apple.quarantine "/Applications/Bex LaTeX Studio.app"
+```
+
+Note: All required Homebrew dynamic libraries (`icu4c`, `freetype`, `graphite2`, `libpng`, `brotli`) are bundled inside `Bex LaTeX Studio.app/Contents/Frameworks`, so end users do **not** need Homebrew installed to run the `.dmg` release.
+
 ## GitHub Releases & Auto-Updater Setup
 
 Bex LaTeX Studio uses **`tauri-plugin-updater`** and **`tauri-plugin-process`** (registered in `src-tauri/src/lib.rs`, configured in `src-tauri/tauri.conf.json`, and permitted in `src-tauri/capabilities/default.json`) to check for signed updates via GitHub Releases (`latest.json`).

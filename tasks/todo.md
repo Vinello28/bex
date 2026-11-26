@@ -220,6 +220,28 @@
   - `npm run build`: `vite build` succeeded (`4724 modules transformed`, `dist/index.html`, `dist/assets/pdf.worker.min-iDqQPrd3.mjs`, `dist/assets/index-Cr_Un6wN.css`, `dist/assets/index-BuEWWMLc.js`).
   - Palette, `modern-web-guidance` (`defer-rendering-heavy-content`, `motion`), and security audits: clean.
 
+---
+
+## Step 10: macOS Ad-Hoc Bundle Signing & Standalone Homebrew Dylib Bundling
+- [x] Enable ad-hoc bundle signing (`"signingIdentity": "-"`, `"hardenedRuntime": false`) in `src-tauri/tauri.conf.json`
+- [x] Add macOS-only `src-tauri/tauri.macos.conf.json` (`beforeBundleCommand` + `bundle.macOS.files` for `Frameworks`)
+- [x] Create `scripts/bundle-macos-dylibs.py` to recursively collect Homebrew dylibs, rewrite install names (`@loader_path` / `@executable_path/../Frameworks`), ad-hoc sign, and self-verify
+- [x] Update `.github/workflows/release.yml` with macOS bundle/dylib verification and quarantine install note, and document macOS install steps in `README.md`
+- [x] Build macOS `.app` and `.dmg` locally and verify `Contents/Frameworks`, `otool -L`, `codesign -vvv --deep --strict`, `DYLD_PRINT_LIBRARIES=1` launch, `.dmg` contents, and script idempotency
+
+### Step 10 Verification Summary
+- **Bundle Signing (`src-tauri/tauri.conf.json`)**: Added `bundle.macOS.signingIdentity: "-"` and `bundle.macOS.hardenedRuntime: false` so Tauri generates `Contents/_CodeSignature/CodeResources`, binds `Info.plist` (`Identifier=com.bex.latexstudio`, `Sealed Resources version=2 rules=13 files=8`), and eliminates `OSStatus -67056` (`code has no resources but signature indicates they must be present`).
+- **Standalone Homebrew Dylib Bundling (`src-tauri/tauri.macos.conf.json`, `scripts/bundle-macos-dylibs.py`)**: Configured `beforeBundleCommand` and `bundle.macOS.files` (`Frameworks: target/macos-frameworks`) to recursively resolve, copy, rewrite (`@executable_path/../Frameworks/...` and `@loader_path/...`), and ad-hoc sign all 7 direct and transitive Homebrew dependencies (`libbrotlicommon.1.dylib`, `libbrotlidec.1.dylib`, `libfreetype.6.dylib`, `libgraphite2.3.dylib`, `libicudata.79.dylib`, `libicuuc.79.dylib`, `libpng16.16.dylib`).
+- **CI & Docs (`.github/workflows/release.yml`, `README.md`)**: Added post-build macOS bundle verification (`Contents/Frameworks/*.dylib`, zero `/opt/homebrew` or `/usr/local` links via `otool -L`, and `codesign -vvv --deep --strict`) plus release/README instructions for clearing `com.apple.quarantine` on downloaded ad-hoc builds.
+- **Verified Checks**:
+  - `npx tauri build --bundles app,dmg --config '{"bundle":{"createUpdaterArtifacts":false}}'`: exited `0`, produced `Bex LaTeX Studio.app` (`65.10 MiB`) and `Bex LaTeX Studio_0.1.0_aarch64.dmg` (`24.42 MiB`).
+  - `otool -L` on `Contents/MacOS/bex-latex-studio` and all 7 `Contents/Frameworks/*.dylib`: zero `/opt/homebrew` or `/usr/local` references.
+  - `codesign -vvv --deep --strict`: passed (`valid on disk`, `satisfies its Designated Requirement`) on both the built `.app` and the `.app` mounted from the `.dmg` (`hdiutil verify` CRC32 valid).
+  - `DYLD_PRINT_LIBRARIES=1` launch test: app stayed alive cleanly for 3s, loaded all 7 `.dylib`s from `Bex LaTeX Studio.app/Contents/Frameworks/`, and loaded zero `/opt/homebrew` or `/usr/local` libraries.
+  - Idempotency test: running `python3 scripts/bundle-macos-dylibs.py` a second time against the patched binary exited `0` with all 7 dylibs preserved.
+  - Config validation: `YAML_OK` (`.github/workflows/release.yml`), `JSON_OK` (`src-tauri/tauri.conf.json`, `src-tauri/tauri.macos.conf.json`), `PY_OK` (`scripts/bundle-macos-dylibs.py`).
+
+
 
 
 

@@ -1,0 +1,12 @@
+{
+  "build": {
+    "beforeBundleCommand": "python3 scripts/bundle-macos-dylibs.py"
+  },
+  "bundle": {
+    "macOS": {
+      "files": {
+        "Frameworks": "target/macos-frameworks"
+      }
+    }
+  }
+}
