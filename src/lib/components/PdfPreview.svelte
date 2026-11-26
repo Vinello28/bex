@@ -678,8 +678,12 @@
     height: 100%;
     min-height: 0;
     min-width: 0;
-    background: var(--bg-muted, #ececec);
-    color: var(--text-primary, #111111);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-island);
+    box-shadow: var(--shadow-island);
+    overflow: hidden;
+    color: var(--text-primary);
   }
 
   .pdf-toolbar {
@@ -689,8 +693,8 @@
     gap: 8px;
     min-height: 38px;
     padding: 4px 10px;
-    background: var(--bg-elevated, #fafafa);
-    border-bottom: 1px solid var(--border-subtle, #dfdfdf);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-subtle);
     flex-shrink: 0;
     overflow-x: auto;
   }
@@ -825,16 +829,11 @@
     min-height: 0;
     overflow: auto;
     padding: 20px 24px;
+    background: var(--bg-elevated);
     scrollbar-gutter: stable;
     overscroll-behavior: contain;
     scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thumb, #737373) var(--scrollbar-track, transparent);
-  }
-
-  @supports (color: light-dark(white, black)) {
-    .pdf-viewport {
-      --scrollbar-thumb: light-dark(#737373, #6a6a6a);
-    }
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   }
 
   .pdf-pages {

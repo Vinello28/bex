@@ -1,4 +1,6 @@
+pub mod ai_agent;
 pub mod compiler;
+pub mod mcp;
 pub mod workspace;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -15,6 +17,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             workspace::init_default_workspace,
             workspace::open_workspace,
+            workspace::create_new_project,
             workspace::list_workspace_files,
             workspace::read_text_file,
             workspace::save_text_file,
@@ -24,6 +27,11 @@ pub fn run() {
             workspace::export_pdf,
             compiler::detect_compilers,
             compiler::compile_latex,
+            mcp::mcp_list_tools,
+            mcp::mcp_jsonrpc,
+            ai_agent::ai_get_env_status,
+            ai_agent::ai_list_models,
+            ai_agent::ai_send_message,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

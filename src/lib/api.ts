@@ -4,12 +4,16 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import type {
+  AiAgentRequest,
+  AiAgentResponse,
+  AiEnvStatus,
   AppUpdateInfo,
   CompileRequest,
   CompileResponse,
   CompilerInfo,
   FileNode,
   LatexDiagnostic,
+  McpToolInfo,
   SaveResult,
   UpdateProgress,
   WorkspaceInfo,
@@ -329,6 +333,27 @@ export async function openWorkspace(rootPath: string): Promise<WorkspaceInfo> {
   return invoke<WorkspaceInfo>("open_workspace", { rootPath });
 }
 
+export async function createNewProject(
+  rootPath: string,
+  seedTemplate = true
+): Promise<WorkspaceInfo> {
+  if (!isTauriRuntime()) {
+    const norm = normalizeMockPath(rootPath) || MOCK_ROOT;
+    const parts = norm.split("/");
+    if (!mockFiles.has(`${norm}/main.tex`)) {
+      const sample = mockFiles.get(`${MOCK_ROOT}/main.tex`) ?? "\\documentclass{article}\n\\begin{document}\nHello.\n\\end{document}\n";
+      mockFiles.set(`${norm}/main.tex`, seedTemplate ? sample : "\\documentclass{article}\n\\begin{document}\n\n\\end{document}\n");
+    }
+    return {
+      rootPath: norm,
+      name: parts[parts.length - 1] || "new_project",
+      files: buildMockTree(norm),
+      defaultEntryFile: "main.tex",
+    };
+  }
+  return invoke<WorkspaceInfo>("create_new_project", { rootPath, seedTemplate });
+}
+
 export async function listWorkspaceFiles(rootPath: string): Promise<FileNode[]> {
   if (!isTauriRuntime()) {
     return buildMockTree(rootPath);
@@ -512,6 +537,175 @@ export async function pickPdfSavePath(defaultName: string): Promise<string | nul
     defaultPath: defaultName,
     filters: [{ name: "PDF Document", extensions: ["pdf"] }],
   });
+}
+
+export async function pickAttachmentFile(): Promise<string | null> {
+  if (!isTauriRuntime()) {
+    return null;
+  }
+  const selected = await open({
+    directory: false,
+    multiple: false,
+    title: "Attach File for Bex AI",
+    filters: [
+      {
+        name: "Text & LaTeX Documents",
+        extensions: ["tex", "bib", "md", "txt", "csv", "json", "sty", "cls", "log"],
+      },
+    ],
+  });
+  return typeof selected === "string" ? selected : null;
+}
+
+// --- MCP & AI Agent IPC API ---
+
+const MOCK_MCP_TOOLS: McpToolInfo[] = [
+  {
+    name: "get_editor_context",
+    description: "Inspect the current workspace root, active file, entry .tex file, compiler engine, and diagnostics.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "list_project_files",
+    description: "List all files and directories in the current LaTeX workspace.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "read_file",
+    description: "Read the UTF-8 contents of a file inside the workspace.",
+    inputSchema: {
+      type: "object",
+      properties: { path: { type: "string", description: "Workspace-relative file path" } },
+      required: ["path"],
+    },
+  },
+  {
+    name: "write_file",
+    description: "Overwrite or write a file inside the workspace.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Workspace-relative file path" },
+        content: { type: "string", description: "Full file content" },
+      },
+      required: ["path", "content"],
+    },
+  },
+  {
+    name: "insert_text",
+    description: "Insert LaTeX or text into an existing file at a chosen anchor.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string" },
+        text: { type: "string" },
+        position: { type: "string", enum: ["before_end_document", "end", "start", "line"] },
+        line_number: { type: "integer" },
+      },
+      required: ["text"],
+    },
+  },
+  {
+    name: "replace_in_file",
+    description: "Replace an exact string inside a workspace file.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string" },
+        search: { type: "string" },
+        replacement: { type: "string" },
+        replace_all: { type: "boolean" },
+      },
+      required: ["search", "replacement"],
+    },
+  },
+  {
+    name: "create_file",
+    description: "Create a new file or directory in the workspace.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string" },
+        content: { type: "string" },
+        is_dir: { type: "boolean" },
+      },
+      required: ["path"],
+    },
+  },
+  {
+    name: "compile_project",
+    description: "Compile the current LaTeX project to PDF and return diagnostics.",
+    inputSchema: {
+      type: "object",
+      properties: { entry_file: { type: "string" } },
+    },
+  },
+];
+
+export async function mcpListTools(): Promise<McpToolInfo[]> {
+  if (!isTauriRuntime()) {
+    return MOCK_MCP_TOOLS;
+  }
+  return invoke<McpToolInfo[]>("mcp_list_tools");
+}
+
+export async function mcpJsonRpc(
+  request: Record<string, unknown>,
+  workspaceRoot: string,
+  activeFile?: string | null,
+  entryFile?: string | null,
+  selectedEngine?: string
+): Promise<unknown> {
+  if (!isTauriRuntime()) {
+    return {
+      jsonrpc: "2.0",
+      id: request.id ?? null,
+      result: { tools: MOCK_MCP_TOOLS },
+    };
+  }
+  return invoke<unknown>("mcp_jsonrpc", {
+    request,
+    workspaceRoot,
+    activeFile: activeFile ?? null,
+    entryFile: entryFile ?? null,
+    selectedEngine: selectedEngine ?? "auto",
+  });
+}
+
+export async function aiGetEnvStatus(): Promise<AiEnvStatus> {
+  if (!isTauriRuntime()) {
+    return {
+      hasGoogleEnvKey: false,
+      defaultGoogleModel: "gemini-2.5-flash",
+    };
+  }
+  return invoke<AiEnvStatus>("ai_get_env_status");
+}
+
+export async function aiListModels(
+  provider: string,
+  baseUrl: string,
+  apiKey: string
+): Promise<string[]> {
+  if (!isTauriRuntime()) {
+    if (provider === "google") return ["gemini-2.5-flash", "gemini-2.5-pro"];
+    if (provider === "ollama") return ["llama3.2", "qwen2.5-coder"];
+    return [baseUrl ? "local-model" : "default"];
+  }
+  return invoke<string[]>("ai_list_models", { provider, baseUrl, apiKey });
+}
+
+export async function aiSendMessage(request: AiAgentRequest): Promise<AiAgentResponse> {
+  if (!isTauriRuntime()) {
+    return {
+      assistantMessage:
+        "Browser preview mode is active. Run the desktop Tauri app (`npm run tauri dev`) to connect Bex AI to Google AI Studio, Ollama, LM Studio, or vLLM with live MCP workspace tools.",
+      toolTraces: [],
+      mutations: [],
+      compileResult: null,
+    };
+  }
+  return invoke<AiAgentResponse>("ai_send_message", { request });
 }
 
 // --- App Auto-Updater API ---

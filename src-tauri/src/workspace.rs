@@ -415,7 +415,7 @@ pub fn open_workspace_dir(root_dir: &Path) -> Result<WorkspaceInfo, String> {
     })
 }
 
-fn write_utf8_atomic(target: &Path, content: &str) -> Result<usize, String> {
+pub(crate) fn write_utf8_atomic(target: &Path, content: &str) -> Result<usize, String> {
     if let Some(parent) = target.parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent).map_err(|e| {
@@ -495,6 +495,39 @@ pub fn init_default_workspace(app: tauri::AppHandle) -> Result<WorkspaceInfo, St
 pub fn open_workspace(root_path: String) -> Result<WorkspaceInfo, String> {
     let path = validate_non_empty_path(&root_path, "Workspace path")?;
     open_workspace_dir(&path)
+}
+
+#[tauri::command]
+pub fn create_new_project(root_path: String, seed_template: bool) -> Result<WorkspaceInfo, String> {
+    let dir = validate_non_empty_path(&root_path, "Project path")?;
+    fs::create_dir_all(&dir).map_err(|e| {
+        format!(
+            "Failed to create project directory '{}': {}",
+            dir.display(),
+            e
+        )
+    })?;
+
+    if seed_template {
+        seed_sample_project(&dir)?;
+    } else {
+        let mut visited = HashSet::new();
+        let has_tex = if let Ok(nodes) = collect_file_nodes(&dir, "", &mut visited) {
+            let mut tex_files = Vec::new();
+            collect_tex_files_in_order(&nodes, &mut tex_files);
+            !tex_files.is_empty()
+        } else {
+            false
+        };
+
+        if !has_tex {
+            let main_tex = dir.join("main.tex");
+            let minimal_content = "\\documentclass{article}\n\n\\title{New Project}\n\\author{}\n\\date{\\today}\n\n\\begin{document}\n\n\\maketitle\n\n\\section{Introduction}\n\n\\end{document}\n";
+            write_utf8_atomic(&main_tex, minimal_content)?;
+        }
+    }
+
+    open_workspace_dir(&dir)
 }
 
 #[tauri::command]
@@ -835,5 +868,26 @@ mod tests {
         seed_sample_project(&ws.dir).expect("re-seed");
         let after = fs::read_to_string(ws.dir.join("main.tex")).unwrap();
         assert_eq!(after, custom);
+    }
+
+    #[test]
+    fn create_new_project_seeded_and_empty() {
+        let ws1 = TempWorkspace::new("create-seeded");
+        let proj1_dir = ws1.dir.join("seeded_proj");
+        let res1 = create_new_project(proj1_dir.to_string_lossy().into_owned(), true)
+            .expect("create seeded project");
+        assert_eq!(res1.default_entry_file.as_deref(), Some("main.tex"));
+        assert!(proj1_dir.join("main.tex").is_file());
+        assert!(proj1_dir.join("sections/intro.tex").is_file());
+
+        let ws2 = TempWorkspace::new("create-blank");
+        let proj2_dir = ws2.dir.join("blank_proj");
+        let res2 = create_new_project(proj2_dir.to_string_lossy().into_owned(), false)
+            .expect("create blank project");
+        assert_eq!(res2.default_entry_file.as_deref(), Some("main.tex"));
+        assert!(proj2_dir.join("main.tex").is_file());
+        assert!(!proj2_dir.join("sections/intro.tex").exists());
+        let content = fs::read_to_string(proj2_dir.join("main.tex")).unwrap();
+        assert!(content.contains("\\documentclass{article}"));
     }
 }

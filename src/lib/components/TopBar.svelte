@@ -12,30 +12,19 @@
     CircleCheck,
     CircleExclamationPoint,
     TriangleExclamationPoint,
-    Sun,
-    Moon,
-    Monitor,
     ChevronDown,
-    RefreshCw,
-    CircleArrowUp,
+    Settings,
+    Home,
+    Sparkles,
   } from "@lucide/svelte";
-  import type { CompilerInfo, LatexDiagnostic } from "../types";
-
-  export type ThemeMode = "system" | "light" | "dark";
+  import type { LatexDiagnostic } from "../types";
 
   interface Props {
     projectName: string;
     sidebarOpen: boolean;
     onToggleSidebar: () => void;
-    texFiles: string[];
     workspaceRoot: string | null;
     entryFile: string | null;
-    onChangeEntryFile: (path: string) => void;
-    compilers: CompilerInfo[];
-    selectedEngine: string;
-    onChangeEngine: (engine: string) => void;
-    autoCompileOnSave: boolean;
-    onToggleAutoCompile: (enabled: boolean) => void;
     isCompiling: boolean;
     compileSuccess: boolean | null;
     lastCompileMs: number | null;
@@ -43,10 +32,10 @@
     isDirty: boolean;
     hasAnyDirty: boolean;
     hasPdf: boolean;
-    theme: ThemeMode;
-    appVersion: string;
     availableUpdateVersion: string | null;
-    onCycleTheme: () => void;
+    aiSidebarOpen?: boolean;
+    onToggleAiSidebar?: () => void;
+    onGoHome?: () => void;
     onOpenFolder: () => void;
     onNewFile: () => void;
     onNewFolder: () => void;
@@ -54,22 +43,15 @@
     onRecompile: () => void;
     onExportPdf: () => void;
     onToggleLogs: () => void;
-    onCheckUpdates: () => void;
+    onOpenSettings: () => void;
   }
 
   let {
     projectName,
     sidebarOpen,
     onToggleSidebar,
-    texFiles,
     workspaceRoot,
     entryFile,
-    onChangeEntryFile,
-    compilers,
-    selectedEngine,
-    onChangeEngine,
-    autoCompileOnSave,
-    onToggleAutoCompile,
     isCompiling,
     compileSuccess,
     lastCompileMs,
@@ -77,10 +59,10 @@
     isDirty,
     hasAnyDirty,
     hasPdf,
-    theme,
-    appVersion,
     availableUpdateVersion,
-    onCycleTheme,
+    aiSidebarOpen = false,
+    onToggleAiSidebar,
+    onGoHome,
     onOpenFolder,
     onNewFile,
     onNewFolder,
@@ -88,7 +70,7 @@
     onRecompile,
     onExportPdf,
     onToggleLogs,
-    onCheckUpdates,
+    onOpenSettings,
   }: Props = $props();
 
   let fileMenuTriggerEl: HTMLButtonElement | undefined = $state();
@@ -106,56 +88,6 @@
   const warningCount = $derived(
     diagnostics.filter((d) => d.severity === "warning").length
   );
-
-  const engineOptions = $derived.by(() => {
-    const map = new Map(compilers.map((c) => [c.id, c]));
-    const defs = [
-      { id: "auto", baseLabel: "Auto (Embedded Tectonic Rust)" },
-      { id: "tectonic", baseLabel: "Tectonic (Embedded Rust)" },
-      { id: "pdflatex", baseLabel: "pdfLaTeX" },
-      { id: "xelatex", baseLabel: "XeLaTeX" },
-      { id: "lualatex", baseLabel: "LuaLaTeX" },
-    ];
-    return defs.map((d) => {
-      if (d.id === "auto") {
-        const tectonic = map.get("tectonic");
-        const suffix =
-          tectonic && !tectonic.available ? " [fallback]" : "";
-        return {
-          id: d.id,
-          label: `${d.baseLabel}${suffix}`,
-          available: true,
-        };
-      }
-      const info = map.get(d.id);
-      const available = info ? info.available : true;
-      const suffix = info
-        ? info.available
-          ? ""
-          : " (missing)"
-        : "";
-      return {
-        id: d.id,
-        label: `${d.baseLabel}${suffix}`,
-        available,
-      };
-    });
-  });
-
-  const themeTooltip = $derived.by(() => {
-    if (theme === "system") return "Theme: System (click for Light)";
-    if (theme === "light") return "Theme: Light (click for Dark)";
-    return "Theme: Dark (click for System)";
-  });
-
-  function formatRelativeTex(fullPath: string): string {
-    if (!workspaceRoot) return fullPath;
-    const normRoot = workspaceRoot.replace(/[\\/]+$/, "");
-    if (fullPath.startsWith(normRoot + "/") || fullPath.startsWith(normRoot + "\\")) {
-      return fullPath.slice(normRoot.length + 1);
-    }
-    return fullPath;
-  }
 
   function closeFileMenu() {
     try {
@@ -207,7 +139,13 @@
       {/if}
     </button>
 
-    <div class="brand" title="Bex LaTeX Studio">
+    <button
+      type="button"
+      class="brand-btn"
+      title="Welcome Screen / Projects"
+      aria-label="Welcome Screen / Projects"
+      onclick={() => onGoHome?.()}
+    >
       <svg
         class="brand-icon"
         width="28"
@@ -361,7 +299,10 @@
         <circle cx="40.7" cy="38.1" r="0.82" fill="#ffffff" fill-opacity="0.92" />
       </svg>
       <span class="brand-badge" aria-hidden="true">Bex</span>
-      <span class="project-name" title={workspaceRoot ?? projectName}>
+    </button>
+
+    <div class="project-pill" title={workspaceRoot ?? projectName}>
+      <span class="project-name">
         {projectName}
       </span>
     </div>
@@ -385,6 +326,14 @@
         class="file-popover"
         ontoggle={handleFileMenuToggle}
       >
+        <button
+          type="button"
+          class="popover-item"
+          onclick={() => handleFileMenuAction(() => onGoHome?.())}
+        >
+          <Home size={14} aria-hidden="true" />
+          <span>Welcome Screen</span>
+        </button>
         <button
           type="button"
           class="popover-item"
@@ -431,70 +380,11 @@
           <Download size={14} aria-hidden="true" />
           <span>Export PDF...</span>
         </button>
-        <hr class="popover-sep" />
-        <button
-          type="button"
-          class="popover-item"
-          onclick={() => handleFileMenuAction(onCheckUpdates)}
-        >
-          <RefreshCw size={14} aria-hidden="true" />
-          <span>Check for Updates...</span>
-          <span class="shortcut">v{appVersion}</span>
-        </button>
       </div>
     </div>
   </div>
 
   <div class="topbar-right">
-    <div class="control-group" title="Main entry .tex file">
-      <label class="sr-only" for="entry-file-select">Main TeX file</label>
-      <select
-        id="entry-file-select"
-        class="compact-select entry-select"
-        value={entryFile ?? ""}
-        disabled={texFiles.length === 0}
-        onchange={(e) => onChangeEntryFile((e.currentTarget as HTMLSelectElement).value)}
-      >
-        {#if texFiles.length === 0}
-          <option value="">No .tex files</option>
-        {:else}
-          {#each texFiles as texPath}
-            <option value={texPath}>{formatRelativeTex(texPath)}</option>
-          {/each}
-        {/if}
-      </select>
-    </div>
-
-    <div class="control-group" title="LaTeX compiler engine">
-      <label class="sr-only" for="compiler-engine-select">Compiler engine</label>
-      <select
-        id="compiler-engine-select"
-        class="compact-select engine-select"
-        value={selectedEngine}
-        onchange={(e) => onChangeEngine((e.currentTarget as HTMLSelectElement).value)}
-      >
-        {#each engineOptions as opt}
-          <option value={opt.id} disabled={!opt.available && opt.id !== selectedEngine}>
-            {opt.label}
-          </option>
-        {/each}
-      </select>
-    </div>
-
-    <label
-      class="auto-compile-pill"
-      class:active={autoCompileOnSave}
-      title="Automatically recompile PDF when saving files"
-    >
-      <input
-        type="checkbox"
-        checked={autoCompileOnSave}
-        onchange={(e) =>
-          onToggleAutoCompile((e.currentTarget as HTMLInputElement).checked)}
-      />
-      <span>Auto-compile on Save</span>
-    </label>
-
     {#if isDirty || hasAnyDirty}
       <button
         type="button"
@@ -511,7 +401,9 @@
       type="button"
       class="compile-btn"
       disabled={isCompiling || !entryFile}
-      title={entryFile ? `Recompile PDF (${modKey}S)` : "Select a .tex entry file first"}
+      title={entryFile
+        ? `Recompile ${entryFile} (${modKey}S)`
+        : "Select a .tex entry file in Settings first"}
       onclick={onRecompile}
     >
       {#if isCompiling}
@@ -549,32 +441,32 @@
       </button>
     {/if}
 
-    {#if availableUpdateVersion}
-      <button
-        type="button"
-        class="update-pill"
-        title="Update available — click to install"
-        aria-label={`Update v${availableUpdateVersion} available — click to install`}
-        onclick={onCheckUpdates}
-      >
-        <CircleArrowUp size={13} aria-hidden="true" />
-        <span>v{availableUpdateVersion}</span>
-      </button>
-    {/if}
+    <button
+      type="button"
+      class="ai-toggle-btn"
+      class:active={aiSidebarOpen}
+      aria-pressed={aiSidebarOpen}
+      title={`AI Assistant (${modKey}⇧A)`}
+      onclick={onToggleAiSidebar}
+    >
+      <Sparkles size={14} aria-hidden="true" />
+      <span class="ai-label">AI</span>
+    </button>
 
     <button
       type="button"
-      class="icon-btn"
-      aria-label={themeTooltip}
-      title={themeTooltip}
-      onclick={onCycleTheme}
+      class="icon-btn settings-btn"
+      aria-label={availableUpdateVersion
+        ? `Settings (update v${availableUpdateVersion} available)`
+        : "Settings"}
+      title={availableUpdateVersion
+        ? `Settings (${modKey},) — Update v${availableUpdateVersion} available`
+        : `Settings (${modKey},)`}
+      onclick={onOpenSettings}
     >
-      {#if theme === "light"}
-        <Sun size={16} aria-hidden="true" />
-      {:else if theme === "dark"}
-        <Moon size={16} aria-hidden="true" />
-      {:else}
-        <Monitor size={16} aria-hidden="true" />
+      <Settings size={16} aria-hidden="true" />
+      {#if availableUpdateVersion}
+        <span class="update-dot" aria-hidden="true"></span>
       {/if}
     </button>
   </div>
@@ -589,8 +481,8 @@
     justify-content: space-between;
     gap: 10px;
     padding-inline: 10px;
-    background: var(--bg-surface);
-    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-app);
+    border-bottom: none;
     user-select: none;
   }
 
@@ -628,11 +520,27 @@
     }
   }
 
-  .brand {
-    display: flex;
+  .brand-btn {
+    display: inline-flex;
     align-items: center;
     gap: 8px;
-    min-inline-size: 0;
+    padding: 3px 6px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    transition: background-color 120ms ease;
+  }
+
+  @media (hover: hover) {
+    .brand-btn:hover {
+      background: var(--bg-hover);
+    }
+  }
+
+  .brand-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
   }
 
   .brand-icon {
@@ -656,14 +564,58 @@
     flex-shrink: 0;
   }
 
+  .project-pill {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: 26px;
+    padding: 0 8px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    max-inline-size: 200px;
+  }
+
   .project-name {
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 600;
     color: var(--text-primary);
-    max-inline-size: 180px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .ai-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-block-size: 28px;
+    padding: 0 9px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+  }
+
+  @media (hover: hover) {
+    .ai-toggle-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+      border-color: var(--border-strong);
+    }
+  }
+
+  .ai-toggle-btn.active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .ai-label {
+    letter-spacing: 0.02em;
   }
 
   .file-menu-wrap {
@@ -766,52 +718,6 @@
     background: var(--border-subtle);
   }
 
-  .compact-select {
-    block-size: 28px;
-    padding: 0 8px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border-subtle);
-    background: var(--bg-muted);
-    color: var(--text-primary);
-    font-size: 12px;
-    cursor: pointer;
-  }
-
-  .entry-select {
-    max-inline-size: 155px;
-    font-family: var(--font-mono);
-  }
-
-  .engine-select {
-    max-inline-size: 235px;
-  }
-
-  .auto-compile-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    block-size: 28px;
-    padding: 0 9px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border-subtle);
-    background: var(--bg-muted);
-    color: var(--text-secondary);
-    font-size: 12px;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-
-  .auto-compile-pill.active {
-    border-color: var(--accent);
-    background: var(--accent-soft);
-    color: var(--text-primary);
-  }
-
-  .auto-compile-pill input {
-    margin: 0;
-    cursor: pointer;
-  }
-
   .save-btn {
     display: inline-flex;
     align-items: center;
@@ -911,29 +817,19 @@
     font-size: 11px;
   }
 
-  .update-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    block-size: 28px;
-    padding: 0 9px;
-    border-radius: 999px;
-    border: 1px solid var(--border-subtle);
-    border-color: color-mix(in oklab, var(--success) 38%, transparent);
-    background: var(--success-soft);
-    color: var(--success);
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: background-color 120ms ease, border-color 120ms ease;
+  .settings-btn {
+    position: relative;
   }
 
-  @media (hover: hover) {
-    .update-pill:hover {
-      background: var(--bg-active);
-      border-color: var(--success);
-    }
+  .update-dot {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    inline-size: 7px;
+    block-size: 7px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 0 2px var(--bg-surface);
+    pointer-events: none;
   }
 </style>

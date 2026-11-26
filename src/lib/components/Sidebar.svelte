@@ -339,7 +339,10 @@
     display: flex;
     flex-direction: column;
     background: var(--bg-surface);
-    border-inline-end: 1px solid var(--border-subtle);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-island);
+    box-shadow: var(--shadow-island);
+    overflow: hidden;
     min-inline-size: 0;
     user-select: none;
   }
@@ -352,6 +355,7 @@
     justify-content: space-between;
     gap: 6px;
     padding: 0 8px 0 12px;
+    background: var(--bg-surface);
     border-bottom: 1px solid var(--border-subtle);
   }
 

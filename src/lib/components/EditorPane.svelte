@@ -279,26 +279,26 @@
   }
 
   const lightHighlightStyle = HighlightStyle.define([
-    { tag: tags.comment, color: "#6e6e6e", fontStyle: "italic" },
-    { tag: tags.keyword, color: "#b45309", fontWeight: "600" },
-    { tag: tags.tagName, color: "#b45309", fontWeight: "600" },
-    { tag: tags.atom, color: "#0f766e", fontWeight: "500" },
-    { tag: tags.number, color: "#c2410c" },
-    { tag: tags.string, color: "#15803d" },
-    { tag: tags.bracket, color: "#a21caf", fontWeight: "600" },
-    { tag: tags.standard(tags.variableName), color: "#be185d" },
+    { tag: tags.comment, color: "#8c8c8c", fontStyle: "italic" },
+    { tag: tags.keyword, color: "#0033b3", fontWeight: "600" },
+    { tag: tags.tagName, color: "#0033b3", fontWeight: "600" },
+    { tag: tags.atom, color: "#00737a", fontWeight: "500" },
+    { tag: tags.number, color: "#1750eb" },
+    { tag: tags.string, color: "#067d17" },
+    { tag: tags.bracket, color: "#0033b3", fontWeight: "600" },
+    { tag: tags.standard(tags.variableName), color: "#871094" },
     { tag: tags.invalid, color: "#c62828", textDecoration: "underline" },
   ]);
 
   const darkHighlightStyle = HighlightStyle.define([
-    { tag: tags.comment, color: "#858585", fontStyle: "italic" },
-    { tag: tags.keyword, color: "#fbbf24", fontWeight: "600" },
-    { tag: tags.tagName, color: "#fbbf24", fontWeight: "600" },
-    { tag: tags.atom, color: "#2dd4bf", fontWeight: "500" },
-    { tag: tags.number, color: "#fb923c" },
-    { tag: tags.string, color: "#4ade80" },
-    { tag: tags.bracket, color: "#e879f9", fontWeight: "600" },
-    { tag: tags.standard(tags.variableName), color: "#fb7185" },
+    { tag: tags.comment, color: "#7a7e85", fontStyle: "italic" },
+    { tag: tags.keyword, color: "#cf8e6d", fontWeight: "600" },
+    { tag: tags.tagName, color: "#cf8e6d", fontWeight: "600" },
+    { tag: tags.atom, color: "#2aacb8", fontWeight: "500" },
+    { tag: tags.number, color: "#2aacb8" },
+    { tag: tags.string, color: "#6aab73" },
+    { tag: tags.bracket, color: "#bcbec4", fontWeight: "600" },
+    { tag: tags.standard(tags.variableName), color: "#cf8e6d" },
     { tag: tags.invalid, color: "#ef5350", textDecoration: "underline" },
   ]);
 
@@ -307,8 +307,8 @@
       {
         "&": {
           height: "100%",
-          backgroundColor: dark ? "var(--bg-surface, #0a0a0a)" : "var(--bg-surface, #ffffff)",
-          color: dark ? "var(--text-primary, #f5f5f5)" : "var(--text-primary, #111111)",
+          backgroundColor: dark ? "var(--bg-surface, #1a1a1c)" : "var(--bg-surface, #ffffff)",
+          color: dark ? "var(--text-primary, #ededee)" : "var(--text-primary, #141415)",
           fontSize: "13.5px",
           fontFamily:
             "'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, Monaco, Consolas, monospace",
@@ -325,15 +325,15 @@
           caretColor: dark ? "#f59e0b" : "#b45309",
         },
         ".cm-gutters": {
-          backgroundColor: dark ? "var(--bg-elevated, #121212)" : "var(--bg-elevated, #fafafa)",
-          color: dark ? "var(--text-muted, #858585)" : "var(--text-muted, #6e6e6e)",
+          backgroundColor: dark ? "var(--bg-elevated, #222224)" : "var(--bg-elevated, #f5f5f6)",
+          color: dark ? "var(--text-muted, #808086)" : "var(--text-muted, #6e6e73)",
           borderRight: dark
-            ? "1px solid var(--border-subtle, #242424)"
-            : "1px solid var(--border-subtle, #dfdfdf)",
+            ? "1px solid var(--border-subtle, #2d2d30)"
+            : "1px solid var(--border-subtle, #d6d6d8)",
         },
         ".cm-activeLineGutter": {
           backgroundColor: dark ? "rgba(245, 158, 11, 0.14)" : "rgba(180, 83, 9, 0.10)",
-          color: dark ? "#f5f5f5" : "#111111",
+          color: dark ? "#ededee" : "#141415",
         },
         ".cm-activeLine": {
           backgroundColor: dark ? "rgba(255, 255, 255, 0.04)" : "rgba(0, 0, 0, 0.035)",
@@ -346,21 +346,21 @@
           backgroundColor: dark ? "rgba(245, 158, 11, 0.25)" : "rgba(180, 83, 9, 0.18)",
         },
         ".cm-panels": {
-          backgroundColor: dark ? "var(--bg-elevated, #121212)" : "var(--bg-elevated, #fafafa)",
-          color: dark ? "var(--text-primary, #f5f5f5)" : "var(--text-primary, #111111)",
+          backgroundColor: dark ? "var(--bg-elevated, #222224)" : "var(--bg-elevated, #f5f5f6)",
+          color: dark ? "var(--text-primary, #ededee)" : "var(--text-primary, #141415)",
           borderTop: dark
-            ? "1px solid var(--border-subtle, #242424)"
-            : "1px solid var(--border-subtle, #dfdfdf)",
+            ? "1px solid var(--border-subtle, #2d2d30)"
+            : "1px solid var(--border-subtle, #d6d6d8)",
           borderBottom: dark
-            ? "1px solid var(--border-subtle, #242424)"
-            : "1px solid var(--border-subtle, #dfdfdf)",
+            ? "1px solid var(--border-subtle, #2d2d30)"
+            : "1px solid var(--border-subtle, #d6d6d8)",
         },
         ".cm-tooltip": {
-          backgroundColor: dark ? "var(--bg-elevated, #121212)" : "var(--bg-elevated, #fafafa)",
-          color: dark ? "var(--text-primary, #f5f5f5)" : "var(--text-primary, #111111)",
+          backgroundColor: dark ? "var(--bg-elevated, #222224)" : "var(--bg-elevated, #f5f5f6)",
+          color: dark ? "var(--text-primary, #ededee)" : "var(--text-primary, #141415)",
           border: dark
-            ? "1px solid var(--border-subtle, #242424)"
-            : "1px solid var(--border-subtle, #dfdfdf)",
+            ? "1px solid var(--border-subtle, #2d2d30)"
+            : "1px solid var(--border-subtle, #d6d6d8)",
           borderRadius: "6px",
           boxShadow: dark
             ? "var(--shadow-popover, 0 12px 32px rgba(0, 0, 0, 0.65))"
@@ -368,7 +368,7 @@
         },
         ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
           backgroundColor: dark ? "#f59e0b" : "#b45309",
-          color: dark ? "#0a0a0a" : "#ffffff",
+          color: dark ? "#101011" : "#ffffff",
         },
       },
       { dark }
@@ -818,8 +818,12 @@
     height: 100%;
     min-height: 0;
     min-width: 0;
-    background: var(--bg-surface, #ffffff);
-    color: var(--text-primary, #111111);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-island);
+    box-shadow: var(--shadow-island);
+    overflow: hidden;
+    color: var(--text-primary);
   }
 
   .editor-toolbar {
@@ -829,8 +833,8 @@
     gap: 8px;
     min-height: 38px;
     padding: 4px 10px;
-    background: var(--bg-elevated, #fafafa);
-    border-bottom: 1px solid var(--border-subtle, #dfdfdf);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-subtle);
     flex-shrink: 0;
   }
 

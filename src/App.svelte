@@ -1,42 +1,78 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import TopBar, { type ThemeMode } from "./lib/components/TopBar.svelte";
+  import HomeView from "./lib/components/HomeView.svelte";
+  import TopBar from "./lib/components/TopBar.svelte";
   import Sidebar from "./lib/components/Sidebar.svelte";
   import EditorPane from "./lib/components/EditorPane.svelte";
   import PdfPreview from "./lib/components/PdfPreview.svelte";
+  import AiSidebar from "./lib/components/AiSidebar.svelte";
   import ModalDialog, { type ModalMode } from "./lib/components/ModalDialog.svelte";
-  import UpdateModal, {
-    type UpdateModalStatus,
-  } from "./lib/components/UpdateModal.svelte";
+  import SettingsDialog from "./lib/components/SettingsDialog.svelte";
   import type {
+    AiAttachment,
+    AiChatMessage,
+    AiEnvStatus,
+    AiSettings,
     AppUpdateInfo,
-    FileNode,
-    WorkspaceInfo,
+    AppView,
     CompilerInfo,
+    EditorMutation,
+    FileNode,
     LatexDiagnostic,
+    McpToolInfo,
+    RecentFile,
+    RecentProject,
+    SettingsSectionId,
+    ThemeMode,
     UpdateProgress,
+    UpdateStatus,
+    WorkspaceInfo,
   } from "./lib/types";
   import {
-    initDefaultWorkspace,
-    openWorkspace,
-    listWorkspaceFiles,
-    readTextFile,
-    saveTextFile,
-    createFile,
-    renamePath,
-    deletePath,
-    exportPdf,
-    detectCompilers,
-    compileLatex,
-    pickWorkspaceFolder,
-    pickPdfSavePath,
-    getCurrentAppVersion,
+    loadRecentFiles,
+    loadRecentProjects,
+    recordRecentFile,
+    recordRecentProject,
+    removeRecentFile,
+    removeRecentProject,
+  } from "./lib/recent";
+  import {
+    aiGetEnvStatus,
+    aiListModels,
+    aiSendMessage,
     checkForAppUpdate,
+    compileLatex,
+    createFile,
+    createNewProject,
+    deletePath,
+    detectCompilers,
     downloadAndInstallAppUpdate,
+    exportPdf,
+    getCurrentAppVersion,
+    initDefaultWorkspace,
+    listWorkspaceFiles,
+    mcpListTools,
+    openWorkspace,
+    pickAttachmentFile,
+    pickPdfSavePath,
+    pickWorkspaceFolder,
+    readTextFile,
     relaunchApp,
+    renamePath,
+    saveTextFile,
   } from "./lib/api";
 
   const THEME_STORAGE_KEY = "bex-theme";
+  const ENGINE_STORAGE_KEY = "bex-compiler-engine";
+  const AUTO_COMPILE_STORAGE_KEY = "bex-auto-compile";
+  const AI_SETTINGS_STORAGE_KEY = "bex-ai-settings";
+  const VALID_ENGINES = new Set([
+    "auto",
+    "tectonic",
+    "pdflatex",
+    "xelatex",
+    "lualatex",
+  ]);
   const COMPILABLE_EXTENSIONS = new Set([
     ".tex",
     ".ltx",
@@ -61,6 +97,19 @@
     ".gz",
     ".zip",
   ]);
+
+  const DEFAULT_AI_SETTINGS: AiSettings = {
+    provider: "google",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    apiKey: "",
+    model: "gemini-2.5-flash",
+    autoCompileAfterAiEdit: true,
+  };
+
+  // Top-level navigation & recent history (starts on JetBrains Welcome Home screen)
+  let currentView = $state<AppView>("home");
+  let recentProjects = $state<RecentProject[]>(loadRecentProjects());
+  let recentFiles = $state<RecentFile[]>(loadRecentFiles());
 
   // Workspace & files (relative paths matching FileNode.path & CompileRequest.entryFile)
   let workspace = $state<WorkspaceInfo | null>(null);
@@ -101,9 +150,67 @@
   const texFiles = $derived.by(() => collectTexFiles(files));
 
   // Compilers & compilation output
+  function loadInitialEngine(): string {
+    try {
+      const saved = localStorage.getItem(ENGINE_STORAGE_KEY);
+      if (saved && VALID_ENGINES.has(saved)) {
+        return saved;
+      }
+    } catch {
+      // Ignore storage failures
+    }
+    return "auto";
+  }
+
+  function loadInitialAutoCompile(): boolean {
+    try {
+      const saved = localStorage.getItem(AUTO_COMPILE_STORAGE_KEY);
+      if (saved === "true") return true;
+      if (saved === "false") return false;
+    } catch {
+      // Ignore storage failures
+    }
+    return true;
+  }
+
+  function loadInitialAiSettings(): AiSettings {
+    try {
+      const raw = localStorage.getItem(AI_SETTINGS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<AiSettings>;
+        const provider =
+          parsed.provider === "google" ||
+          parsed.provider === "ollama" ||
+          parsed.provider === "lmstudio" ||
+          parsed.provider === "vllm"
+            ? parsed.provider
+            : DEFAULT_AI_SETTINGS.provider;
+        return {
+          provider,
+          baseUrl:
+            typeof parsed.baseUrl === "string" && parsed.baseUrl.trim()
+              ? parsed.baseUrl
+              : DEFAULT_AI_SETTINGS.baseUrl,
+          apiKey: typeof parsed.apiKey === "string" ? parsed.apiKey : "",
+          model:
+            typeof parsed.model === "string" && parsed.model.trim()
+              ? parsed.model
+              : DEFAULT_AI_SETTINGS.model,
+          autoCompileAfterAiEdit:
+            typeof parsed.autoCompileAfterAiEdit === "boolean"
+              ? parsed.autoCompileAfterAiEdit
+              : true,
+        };
+      }
+    } catch {
+      // Ignore storage failures
+    }
+    return { ...DEFAULT_AI_SETTINGS };
+  }
+
   let compilers = $state<CompilerInfo[]>([]);
-  let selectedEngine = $state<string>("auto");
-  let autoCompileOnSave = $state<boolean>(true);
+  let selectedEngine = $state<string>(loadInitialEngine());
+  let autoCompileOnSave = $state<boolean>(loadInitialAutoCompile());
   let isCompiling = $state<boolean>(false);
   let pendingCompile = false;
   let compileSuccess = $state<boolean | null>(null);
@@ -121,11 +228,24 @@
 
   // Layout & Resizing
   let sidebarOpen = $state<boolean>(true);
-  let sidebarWidth = $state<number>(248);
+  let sidebarWidth = $state<number>(244);
+  let aiSidebarOpen = $state<boolean>(false);
+  let aiSidebarWidth = $state<number>(360);
   let splitRatio = $state<number>(0.5);
   let isResizing = $state<boolean>(false);
   let workspaceAreaEl: HTMLElement | undefined = $state();
   let splitAreaEl: HTMLElement | undefined = $state();
+
+  // AI Agent & MCP State
+  let aiSettings = $state<AiSettings>(loadInitialAiSettings());
+  let aiEnvStatus = $state<AiEnvStatus>({
+    hasGoogleEnvKey: false,
+    defaultGoogleModel: "gemini-2.5-flash",
+  });
+  let mcpTools = $state<McpToolInfo[]>([]);
+  let aiMessages = $state<AiChatMessage[]>([]);
+  let aiAttachments = $state<AiAttachment[]>([]);
+  let isAiSending = $state<boolean>(false);
 
   // Theme
   function loadInitialTheme(): ThemeMode {
@@ -150,15 +270,41 @@
   let modalParentRelDir = $state<string>("");
   let modalTargetNode = $state<FileNode | null>(null);
 
-  // App Auto-Updater state
+  // Settings Dialog & App Auto-Updater state
+  let settingsOpen = $state<boolean>(false);
+  let settingsSection = $state<SettingsSectionId | null>(null);
   let appVersion = $state<string>("0.1.0");
   let availableUpdate = $state<AppUpdateInfo | null>(null);
-  let updateModalOpen = $state<boolean>(false);
-  let updateStatus = $state<UpdateModalStatus>("idle");
+  let updateStatus = $state<UpdateStatus>("idle");
   let updateProgress = $state<UpdateProgress | null>(null);
   let updateError = $state<string | null>(null);
   let updateCheckPromise: Promise<void> | null = null;
   let updateCheckSilent = true;
+
+  // Persist compiler & AI preferences to localStorage
+  $effect(() => {
+    try {
+      localStorage.setItem(ENGINE_STORAGE_KEY, selectedEngine);
+    } catch {
+      // Ignore storage failures
+    }
+  });
+
+  $effect(() => {
+    try {
+      localStorage.setItem(AUTO_COMPILE_STORAGE_KEY, String(autoCompileOnSave));
+    } catch {
+      // Ignore storage failures
+    }
+  });
+
+  $effect(() => {
+    try {
+      localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(aiSettings));
+    } catch {
+      // Ignore storage failures
+    }
+  });
 
   // Sync theme to documentElement.dataset.theme, meta[name="color-scheme"], and localStorage
   $effect(() => {
@@ -192,7 +338,7 @@
     return () => mq.removeEventListener("change", handleMediaChange);
   });
 
-  // Global keyboard shortcuts (Cmd/Ctrl+S save, Cmd/Ctrl+B toggle sidebar)
+  // Global keyboard shortcuts (Cmd/Ctrl+S save, Cmd/Ctrl+B sidebar, Cmd/Ctrl+Shift+A AI, Cmd/Ctrl+, Settings)
   $effect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
@@ -200,12 +346,27 @@
       if (!isMod || event.altKey) return;
 
       const key = event.key.toLowerCase();
-      if (key === "s") {
+      if (key === "," && !event.shiftKey) {
+        event.preventDefault();
+        if (settingsOpen) {
+          handleCloseSettings();
+        } else {
+          handleOpenSettings();
+        }
+        return;
+      }
+
+      if (currentView !== "editor" || settingsOpen || modalOpen) return;
+
+      if (key === "s" && !event.shiftKey) {
         event.preventDefault();
         void handleSaveCurrentFile();
-      } else if (key === "b") {
+      } else if (key === "b" && !event.shiftKey) {
         event.preventDefault();
         sidebarOpen = !sidebarOpen;
+      } else if (key === "a" && event.shiftKey) {
+        event.preventDefault();
+        aiSidebarOpen = !aiSidebarOpen;
       }
     };
 
@@ -219,17 +380,24 @@
 
   async function bootstrap() {
     try {
-      const [detected, ws, version] = await Promise.all([
+      const [detected, version, envStatus, tools] = await Promise.all([
         detectCompilers().catch(() => [] as CompilerInfo[]),
-        initDefaultWorkspace(),
         getCurrentAppVersion(),
+        aiGetEnvStatus().catch(
+          (): AiEnvStatus => ({
+            hasGoogleEnvKey: false,
+            defaultGoogleModel: "gemini-2.5-flash",
+          })
+        ),
+        mcpListTools().catch(() => [] as McpToolInfo[]),
       ]);
       compilers = detected;
       appVersion = version;
+      aiEnvStatus = envStatus;
+      mcpTools = tools;
       void runUpdateCheck({ silent: true });
-      await applyWorkspace(ws);
     } catch (err) {
-      reportNotice(`Failed to initialize workspace: ${formatError(err)}`);
+      reportNotice(`Failed to initialize application services: ${formatError(err)}`);
     }
   }
 
@@ -254,7 +422,7 @@
         }
         if (info.available && info.version) {
           availableUpdate = info;
-          if (!updateCheckSilent || updateModalOpen) {
+          if (updateStatus !== "downloading" && updateStatus !== "ready-to-restart") {
             updateStatus = "available";
           }
         } else {
@@ -276,18 +444,9 @@
     return updateCheckPromise;
   }
 
-  function handleOpenUpdateModal() {
-    updateModalOpen = true;
-    if (updateStatus === "downloading" || updateStatus === "ready-to-restart") {
-      return;
-    }
-    if (availableUpdate) {
-      updateError = null;
-      updateProgress = null;
-      updateStatus = "available";
-      return;
-    }
-    void runUpdateCheck({ silent: false });
+  function handleOpenSettings(section?: SettingsSectionId) {
+    settingsSection = section ?? null;
+    settingsOpen = true;
   }
 
   async function handleDownloadAndInstall() {
@@ -316,12 +475,32 @@
     }
   }
 
-  function handleCloseUpdateModal() {
+  function handleCloseSettings() {
     if (updateStatus === "downloading") return;
-    updateModalOpen = false;
+    settingsOpen = false;
+    settingsSection = null;
   }
 
-  async function applyWorkspace(ws: WorkspaceInfo) {
+  async function handleTestAiConnection(
+    candidate: AiSettings
+  ): Promise<{ ok: boolean; models: string[]; error?: string }> {
+    try {
+      const models = await aiListModels(
+        candidate.provider,
+        candidate.baseUrl,
+        candidate.apiKey
+      );
+      return { ok: true, models };
+    } catch (err) {
+      return { ok: false, models: [], error: formatError(err) };
+    }
+  }
+
+  async function applyWorkspace(
+    ws: WorkspaceInfo,
+    targetRelPath?: string | null
+  ) {
+    const prevRoot = workspace?.rootPath ?? null;
     workspace = ws;
     files = ws.files;
     savedContentByPath = {};
@@ -334,6 +513,11 @@
     logOutput = "";
     statusNotice = null;
 
+    if (prevRoot && prevRoot !== ws.rootPath) {
+      aiMessages = [];
+      aiAttachments = [];
+    }
+
     const availableTex = collectTexFiles(ws.files);
     const initialEntry =
       ws.defaultEntryFile && availableTex.includes(ws.defaultEntryFile)
@@ -343,8 +527,24 @@
     entryFile = initialEntry;
     activeFilePath = null;
 
+    const targetToOpen =
+      targetRelPath && findNodeByPath(ws.files, targetRelPath)
+        ? targetRelPath
+        : initialEntry;
+
+    recentProjects = recordRecentProject({
+      path: ws.rootPath,
+      name: ws.name,
+      entryFile: initialEntry,
+      lastActiveFile: targetToOpen,
+    });
+
+    currentView = "editor";
+
+    if (targetToOpen) {
+      await openFileInEditor(targetToOpen);
+    }
     if (initialEntry) {
-      await openFileInEditor(initialEntry);
       await runCompile();
     }
   }
@@ -367,6 +567,22 @@
     return joinPath(workspace.rootPath, relPath);
   }
 
+  function recordOpenedFileInHistory(relPath: string) {
+    if (!workspace) return;
+    recentFiles = recordRecentFile({
+      workspacePath: workspace.rootPath,
+      workspaceName: workspace.name,
+      relPath,
+      fileName: basename(relPath),
+    });
+    recentProjects = recordRecentProject({
+      path: workspace.rootPath,
+      name: workspace.name,
+      entryFile,
+      lastActiveFile: relPath,
+    });
+  }
+
   async function openFileInEditor(relPath: string) {
     const ext = extensionOf(relPath);
     if (BINARY_EXTENSIONS.has(ext)) {
@@ -376,6 +592,7 @@
 
     if (relPath in draftContentByPath || relPath in savedContentByPath) {
       activeFilePath = relPath;
+      recordOpenedFileInHistory(relPath);
       return;
     }
 
@@ -386,6 +603,7 @@
       draftContentByPath = { ...draftContentByPath, [relPath]: text };
       activeFilePath = relPath;
       statusNotice = null;
+      recordOpenedFileInHistory(relPath);
     } catch (err) {
       reportNotice(`Unable to read "${basename(relPath)}": ${formatError(err)}`);
     }
@@ -437,6 +655,29 @@
     }
   }
 
+  function applyCompileResponse(res: {
+    success: boolean;
+    pdfBase64?: string | null;
+    pdfPath?: string | null;
+    logOutput: string;
+    diagnostics: LatexDiagnostic[];
+    durationMs: number;
+  }, fallbackMs?: number) {
+    compileSuccess = res.success;
+    lastCompileMs =
+      typeof res.durationMs === "number"
+        ? Math.round(res.durationMs)
+        : (fallbackMs ?? null);
+    diagnostics = res.diagnostics ?? [];
+    logOutput = res.logOutput ?? "";
+    if (res.pdfPath) {
+      pdfPath = res.pdfPath;
+    }
+    if (res.pdfBase64) {
+      pdfBase64 = res.pdfBase64;
+    }
+  }
+
   async function runCompile() {
     if (!workspace || !entryFile) return;
 
@@ -459,21 +700,8 @@
         engine: selectedEngine,
       });
 
-      const elapsed =
-        typeof res.durationMs === "number"
-          ? Math.round(res.durationMs)
-          : Math.round(performance.now() - startedAt);
-
-      compileSuccess = res.success;
-      lastCompileMs = elapsed;
-      diagnostics = res.diagnostics ?? [];
-      logOutput = res.logOutput ?? "";
-      if (res.pdfPath) {
-        pdfPath = res.pdfPath;
-      }
-      if (res.pdfBase64) {
-        pdfBase64 = res.pdfBase64;
-      }
+      const elapsed = Math.round(performance.now() - startedAt);
+      applyCompileResponse(res, elapsed);
     } catch (err) {
       compileSuccess = false;
       const msg = formatError(err);
@@ -504,6 +732,71 @@
     } catch (err) {
       reportNotice(`Could not open folder: ${formatError(err)}`);
     }
+  }
+
+  async function handleNewProject() {
+    try {
+      const picked = await pickWorkspaceFolder();
+      if (!picked) return;
+      const ws = await createNewProject(picked, true);
+      await applyWorkspace(ws);
+    } catch (err) {
+      reportNotice(`Could not create project: ${formatError(err)}`);
+    }
+  }
+
+  async function handleOpenSampleProject() {
+    try {
+      const ws = await initDefaultWorkspace();
+      await applyWorkspace(ws);
+    } catch (err) {
+      reportNotice(`Could not open sample project: ${formatError(err)}`);
+    }
+  }
+
+  async function handleOpenRecentProject(proj: RecentProject) {
+    try {
+      const ws = await openWorkspace(proj.path);
+      await applyWorkspace(ws, proj.lastActiveFile ?? proj.entryFile);
+    } catch (err) {
+      reportNotice(
+        `Could not open "${proj.name}" (${proj.path}): ${formatError(err)}`
+      );
+    }
+  }
+
+  async function handleOpenRecentFile(rf: RecentFile) {
+    try {
+      if (
+        workspace &&
+        normalizePathEq(workspace.rootPath, rf.workspacePath)
+      ) {
+        currentView = "editor";
+        await openFileInEditor(rf.relPath);
+        return;
+      }
+      const ws = await openWorkspace(rf.workspacePath);
+      await applyWorkspace(ws, rf.relPath);
+    } catch (err) {
+      reportNotice(
+        `Could not open "${rf.fileName}": ${formatError(err)}`
+      );
+    }
+  }
+
+  function handleRemoveRecentProject(path: string) {
+    recentProjects = removeRecentProject(path);
+  }
+
+  function handleRemoveRecentFile(workspacePath: string, relPath: string) {
+    recentFiles = removeRecentFile(workspacePath, relPath);
+  }
+
+  async function handleGoHome() {
+    if (workspace) {
+      await flushDirtyBuffers().catch(() => {});
+    }
+    currentView = "home";
   }
 
   async function refreshFileTree() {
@@ -556,10 +849,188 @@
     return suffixOrName?.path ?? null;
   }
 
-  function handleCycleTheme() {
-    if (theme === "system") theme = "light";
-    else if (theme === "light") theme = "dark";
-    else theme = "system";
+  // AI Agent & MCP Interactions
+  function makeMessageId(): string {
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  async function applyAiMutations(mutations: EditorMutation[]) {
+    if (!workspace || mutations.length === 0) return;
+
+    await refreshFileTree();
+
+    let lastMutatedTextFile: string | null = null;
+    for (const mut of mutations) {
+      if (!mut.relPath) continue;
+      let nextContent = mut.content ?? null;
+      if (nextContent === null) {
+        try {
+          nextContent = await readTextFile(mut.absPath || resolveAbsPath(mut.relPath));
+        } catch {
+          nextContent = null;
+        }
+      }
+      if (nextContent !== null) {
+        savedContentByPath = { ...savedContentByPath, [mut.relPath]: nextContent };
+        draftContentByPath = { ...draftContentByPath, [mut.relPath]: nextContent };
+        if (!BINARY_EXTENSIONS.has(extensionOf(mut.relPath))) {
+          lastMutatedTextFile = mut.relPath;
+        }
+      }
+    }
+
+    if (lastMutatedTextFile && lastMutatedTextFile !== activeFilePath) {
+      await openFileInEditor(lastMutatedTextFile);
+    } else if (lastMutatedTextFile) {
+      recordOpenedFileInHistory(lastMutatedTextFile);
+    }
+
+    if (!entryFile) {
+      const remainingTex = collectTexFiles(files);
+      if (remainingTex.length > 0) {
+        entryFile = remainingTex[0];
+      }
+    }
+  }
+
+  async function handleSendAiMessage(prompt: string) {
+    const trimmed = prompt.trim();
+    if ((!trimmed && aiAttachments.length === 0) || !workspace || isAiSending) {
+      return;
+    }
+
+    const effectivePrompt =
+      trimmed ||
+      "Please analyze and summarize the attached file(s) for this LaTeX project.";
+    const sentAttachments = [...aiAttachments];
+    const userMsg: AiChatMessage = {
+      id: makeMessageId(),
+      role: "user",
+      content: effectivePrompt,
+      timestamp: Date.now(),
+      attachments: sentAttachments.map((a) => ({ name: a.name, path: a.path })),
+    };
+
+    const historyPayload = [
+      ...aiMessages
+        .filter((m) => !m.error)
+        .slice(-14)
+        .map((m) => ({ role: m.role, content: m.content })),
+      { role: "user" as const, content: effectivePrompt },
+    ];
+
+    aiMessages = [...aiMessages, userMsg];
+    aiAttachments = [];
+    isAiSending = true;
+
+    try {
+      await flushDirtyBuffers();
+
+      const res = await aiSendMessage({
+        settings: aiSettings,
+        messages: historyPayload,
+        attachments: sentAttachments,
+        workspaceRoot: workspace.rootPath,
+        activeFilePath,
+        activeFileContent: activeFilePath ? activeContent : null,
+        entryFile,
+        selectedEngine,
+        diagnostics,
+      });
+
+      await applyAiMutations(res.mutations ?? []);
+
+      if (res.compileResult) {
+        applyCompileResponse(res.compileResult);
+      } else if (
+        (res.mutations?.length ?? 0) > 0 &&
+        aiSettings.autoCompileAfterAiEdit &&
+        entryFile
+      ) {
+        await runCompile();
+      }
+
+      const assistantMsg: AiChatMessage = {
+        id: makeMessageId(),
+        role: "assistant",
+        content: res.assistantMessage || "Done.",
+        timestamp: Date.now(),
+        toolTraces: res.toolTraces ?? [],
+      };
+      aiMessages = [...aiMessages, assistantMsg];
+    } catch (err) {
+      const errorMsg: AiChatMessage = {
+        id: makeMessageId(),
+        role: "assistant",
+        content: formatError(err),
+        timestamp: Date.now(),
+        error: true,
+      };
+      aiMessages = [...aiMessages, errorMsg];
+    } finally {
+      isAiSending = false;
+    }
+  }
+
+  async function handlePickAiAttachment() {
+    try {
+      const pickedPath = await pickAttachmentFile();
+      if (!pickedPath) return;
+      if (aiAttachments.some((a) => a.path === pickedPath)) {
+        return;
+      }
+      const content = await readTextFile(pickedPath);
+      aiAttachments = [
+        ...aiAttachments,
+        {
+          name: basename(pickedPath),
+          path: pickedPath,
+          content,
+        },
+      ];
+    } catch (err) {
+      reportNotice(`Could not attach file: ${formatError(err)}`);
+    }
+  }
+
+  function handleAttachActiveFile() {
+    if (!activeFilePath) return;
+    const abs = resolveAbsPath(activeFilePath);
+    if (aiAttachments.some((a) => a.path === abs)) return;
+    aiAttachments = [
+      ...aiAttachments,
+      {
+        name: basename(activeFilePath),
+        path: abs,
+        content: activeContent,
+      },
+    ];
+  }
+
+  function handleRemoveAiAttachment(path: string) {
+    aiAttachments = aiAttachments.filter((a) => a.path !== path);
+  }
+
+  function handleInsertCodeIntoEditor(code: string) {
+    if (!activeFilePath) {
+      reportNotice("Open a .tex file in the editor before inserting code.");
+      return;
+    }
+    const current = activeContent;
+    const snippet = code.trim();
+    if (!snippet) return;
+
+    const endDocIdx = current.lastIndexOf("\\end{document}");
+    let updated: string;
+    if (endDocIdx >= 0) {
+      const before = current.slice(0, endDocIdx).replace(/\s*$/, "");
+      const after = current.slice(endDocIdx);
+      updated = `${before}\n\n${snippet}\n\n${after}`;
+    } else {
+      const trimmedBase = current.replace(/\s*$/, "");
+      updated = trimmedBase ? `${trimmedBase}\n\n${snippet}\n` : `${snippet}\n`;
+    }
+    handleEditorChange(updated);
   }
 
   // Modal Triggers
@@ -726,7 +1197,7 @@
     const onMove = (e: PointerEvent) => {
       if (!workspaceAreaEl) return;
       const rect = workspaceAreaEl.getBoundingClientRect();
-      const nextWidth = Math.min(420, Math.max(180, Math.round(e.clientX - rect.left)));
+      const nextWidth = Math.min(420, Math.max(180, Math.round(e.clientX - rect.left - 7)));
       sidebarWidth = nextWidth;
     };
 
@@ -777,6 +1248,35 @@
     handle.addEventListener("pointercancel", onUp);
   }
 
+  function startAiSidebarResize(event: PointerEvent) {
+    const handle = event.currentTarget as HTMLElement;
+    handle.setPointerCapture(event.pointerId);
+    isResizing = true;
+
+    const onMove = (e: PointerEvent) => {
+      if (!workspaceAreaEl) return;
+      const rect = workspaceAreaEl.getBoundingClientRect();
+      const nextWidth = Math.min(560, Math.max(280, Math.round(rect.right - e.clientX - 7)));
+      aiSidebarWidth = nextWidth;
+    };
+
+    const onUp = (e: PointerEvent) => {
+      isResizing = false;
+      try {
+        handle.releasePointerCapture(e.pointerId);
+      } catch {
+        // Ignore if already released
+      }
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+      handle.removeEventListener("pointercancel", onUp);
+    };
+
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+    handle.addEventListener("pointercancel", onUp);
+  }
+
   function handleSidebarResizerKey(e: KeyboardEvent) {
     if (e.key === "ArrowLeft") {
       e.preventDefault();
@@ -797,7 +1297,22 @@
     }
   }
 
+  function handleAiResizerKey(e: KeyboardEvent) {
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      aiSidebarWidth = Math.min(560, aiSidebarWidth + 16);
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      aiSidebarWidth = Math.max(280, aiSidebarWidth - 16);
+    }
+  }
+
   // Helpers
+  function normalizePathEq(a: string, b: string): boolean {
+    const clean = (s: string) => s.replace(/\\/g, "/").replace(/\/+$/, "");
+    return clean(a) === clean(b);
+  }
+
   function collectTexFiles(nodes: FileNode[]): string[] {
     const out: string[] = [];
     for (const node of nodes) {
@@ -865,47 +1380,6 @@
 </script>
 
 <div class="app-shell" class:resizing={isResizing}>
-  <TopBar
-    projectName={workspace?.name ?? "No Project"}
-    {sidebarOpen}
-    onToggleSidebar={() => (sidebarOpen = !sidebarOpen)}
-    {texFiles}
-    workspaceRoot={workspace?.rootPath ?? null}
-    {entryFile}
-    onChangeEntryFile={(path) => {
-      entryFile = path;
-      void runCompile();
-    }}
-    {compilers}
-    {selectedEngine}
-    onChangeEngine={(engine) => {
-      selectedEngine = engine;
-    }}
-    {autoCompileOnSave}
-    onToggleAutoCompile={(enabled) => {
-      autoCompileOnSave = enabled;
-    }}
-    {isCompiling}
-    {compileSuccess}
-    {lastCompileMs}
-    {diagnostics}
-    isDirty={isActiveDirty}
-    hasAnyDirty={dirtyPaths.size > 0}
-    hasPdf={Boolean(pdfPath)}
-    {theme}
-    {appVersion}
-    availableUpdateVersion={availableUpdate?.version ?? null}
-    onCycleTheme={handleCycleTheme}
-    onOpenFolder={handleOpenFolder}
-    onNewFile={() => openCreateModal("create-file", "")}
-    onNewFolder={() => openCreateModal("create-folder", "")}
-    onSave={handleSaveCurrentFile}
-    onRecompile={runCompile}
-    onExportPdf={handleExportPdf}
-    onToggleLogs={() => (showLogs = !showLogs)}
-    onCheckUpdates={handleOpenUpdateModal}
-  />
-
   {#if statusNotice}
     <div class="notice-banner" role="status">
       <span>{statusNotice}</span>
@@ -920,96 +1394,187 @@
     </div>
   {/if}
 
-  <main class="workspace-panes" bind:this={workspaceAreaEl}>
-    {#if sidebarOpen}
-      <div class="pane-sidebar" style={`inline-size: ${sidebarWidth}px`}>
-        <Sidebar
-          {workspace}
-          {files}
-          {activeFilePath}
-          {entryFile}
-          {dirtyPaths}
-          onSelectFile={openFileInEditor}
-          onSetEntryFile={(path) => {
-            entryFile = path;
-            void runCompile();
-          }}
-          onOpenFolder={handleOpenFolder}
-          onCreateFile={(dir) => openCreateModal("create-file", dir ?? "")}
-          onCreateFolder={(dir) => openCreateModal("create-folder", dir ?? "")}
-          onRenameNode={openRenameModal}
-          onDeleteNode={openDeleteModal}
-          onRefresh={refreshFileTree}
-        />
+  {#if currentView === "home"}
+    <HomeView
+      {appVersion}
+      {recentProjects}
+      {recentFiles}
+      {theme}
+      {compilers}
+      {aiSettings}
+      {aiEnvStatus}
+      availableUpdateVersion={availableUpdate?.version ?? null}
+      {updateStatus}
+      onOpenFolder={handleOpenFolder}
+      onNewProject={handleNewProject}
+      onOpenSampleProject={handleOpenSampleProject}
+      onOpenRecentProject={handleOpenRecentProject}
+      onRemoveRecentProject={handleRemoveRecentProject}
+      onOpenRecentFile={handleOpenRecentFile}
+      onRemoveRecentFile={handleRemoveRecentFile}
+      onChangeTheme={(nextTheme) => (theme = nextTheme)}
+      onOpenSettings={handleOpenSettings}
+      onCheckUpdates={() => void runUpdateCheck({ silent: false })}
+    />
+  {:else}
+    <TopBar
+      projectName={workspace?.name ?? "No Project"}
+      {sidebarOpen}
+      onToggleSidebar={() => (sidebarOpen = !sidebarOpen)}
+      {aiSidebarOpen}
+      onToggleAiSidebar={() => (aiSidebarOpen = !aiSidebarOpen)}
+      onGoHome={() => void handleGoHome()}
+      workspaceRoot={workspace?.rootPath ?? null}
+      {entryFile}
+      {isCompiling}
+      {compileSuccess}
+      {lastCompileMs}
+      {diagnostics}
+      isDirty={isActiveDirty}
+      hasAnyDirty={dirtyPaths.size > 0}
+      hasPdf={Boolean(pdfPath)}
+      availableUpdateVersion={availableUpdate?.version ?? null}
+      onOpenFolder={handleOpenFolder}
+      onNewFile={() => openCreateModal("create-file", "")}
+      onNewFolder={() => openCreateModal("create-folder", "")}
+      onSave={handleSaveCurrentFile}
+      onRecompile={runCompile}
+      onExportPdf={handleExportPdf}
+      onToggleLogs={() => (showLogs = !showLogs)}
+      onOpenSettings={() => handleOpenSettings()}
+    />
+
+    <main class="workspace-panes" bind:this={workspaceAreaEl}>
+      {#if sidebarOpen}
+        <div class="pane-sidebar" style={`inline-size: ${sidebarWidth}px`}>
+          <Sidebar
+            {workspace}
+            {files}
+            {activeFilePath}
+            {entryFile}
+            {dirtyPaths}
+            onSelectFile={openFileInEditor}
+            onSetEntryFile={(path) => {
+              entryFile = path;
+              void runCompile();
+            }}
+            onOpenFolder={handleOpenFolder}
+            onCreateFile={(dir) => openCreateModal("create-file", dir ?? "")}
+            onCreateFolder={(dir) => openCreateModal("create-folder", dir ?? "")}
+            onRenameNode={openRenameModal}
+            onDeleteNode={openDeleteModal}
+            onRefresh={refreshFileTree}
+          />
+        </div>
+
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <div
+          class="resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize project sidebar"
+          aria-valuemin={180}
+          aria-valuemax={420}
+          aria-valuenow={sidebarWidth}
+          tabindex="0"
+          onpointerdown={startSidebarResize}
+          onkeydown={handleSidebarResizerKey}
+        ></div>
+      {/if}
+
+      <div class="split-area" bind:this={splitAreaEl}>
+        <section
+          class="pane-editor"
+          aria-label="LaTeX source editor"
+          style={`flex: 0 0 calc(${(splitRatio * 100).toFixed(3)}% - 4px)`}
+        >
+          <EditorPane
+            content={activeContent}
+            filePath={activeFilePath}
+            fileName={activeFileName}
+            isDirty={isActiveDirty}
+            {diagnostics}
+            {jumpToLine}
+            {theme}
+            onChange={handleEditorChange}
+            onSaveAndCompile={handleSaveCurrentFile}
+          />
+        </section>
+
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <div
+          class="resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize editor and PDF preview"
+          aria-valuemin={25}
+          aria-valuemax={75}
+          aria-valuenow={Math.round(splitRatio * 100)}
+          tabindex="0"
+          onpointerdown={startSplitResize}
+          onkeydown={handleSplitResizerKey}
+        ></div>
+
+        <section class="pane-preview" aria-label="PDF preview">
+          <PdfPreview
+            {pdfBase64}
+            {pdfPath}
+            {isCompiling}
+            {compileSuccess}
+            {diagnostics}
+            {logOutput}
+            {showLogs}
+            onToggleLogs={() => (showLogs = !showLogs)}
+            onJumpToLine={handleJumpToLine}
+            onExportPdf={handleExportPdf}
+            onRecompile={runCompile}
+          />
+        </section>
       </div>
 
-      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-      <div
-        class="resizer"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize project sidebar"
-        aria-valuemin={180}
-        aria-valuemax={420}
-        aria-valuenow={sidebarWidth}
-        tabindex="0"
-        onpointerdown={startSidebarResize}
-        onkeydown={handleSidebarResizerKey}
-      ></div>
-    {/if}
+      {#if aiSidebarOpen}
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <div
+          class="resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize AI assistant sidebar"
+          aria-valuemin={280}
+          aria-valuemax={560}
+          aria-valuenow={aiSidebarWidth}
+          tabindex="0"
+          onpointerdown={startAiSidebarResize}
+          onkeydown={handleAiResizerKey}
+        ></div>
 
-    <div class="split-area" bind:this={splitAreaEl}>
-      <section
-        class="pane-editor"
-        aria-label="LaTeX source editor"
-        style={`flex: 0 0 calc(${(splitRatio * 100).toFixed(3)}% - 3px)`}
-      >
-        <EditorPane
-          content={activeContent}
-          filePath={activeFilePath}
-          fileName={activeFileName}
-          isDirty={isActiveDirty}
-          {diagnostics}
-          {jumpToLine}
-          {theme}
-          onChange={handleEditorChange}
-          onSaveAndCompile={handleSaveCurrentFile}
-        />
-      </section>
-
-      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-      <div
-        class="resizer"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize editor and PDF preview"
-        aria-valuemin={25}
-        aria-valuemax={75}
-        aria-valuenow={Math.round(splitRatio * 100)}
-        tabindex="0"
-        onpointerdown={startSplitResize}
-        onkeydown={handleSplitResizerKey}
-      ></div>
-
-      <section class="pane-preview" aria-label="PDF preview">
-        <PdfPreview
-          {pdfBase64}
-          {pdfPath}
-          {isCompiling}
-          {compileSuccess}
-          {diagnostics}
-          {logOutput}
-          {showLogs}
-          onToggleLogs={() => (showLogs = !showLogs)}
-          onJumpToLine={handleJumpToLine}
-          onExportPdf={handleExportPdf}
-          onRecompile={runCompile}
-        />
-      </section>
-    </div>
-  </main>
+        <div class="pane-ai" style={`inline-size: ${aiSidebarWidth}px`}>
+          <AiSidebar
+            messages={aiMessages}
+            isSending={isAiSending}
+            {aiSettings}
+            {aiEnvStatus}
+            {mcpTools}
+            workspaceName={workspace?.name ?? null}
+            {activeFilePath}
+            attachments={aiAttachments}
+            onSendMessage={(prompt) => void handleSendAiMessage(prompt)}
+            onClearChat={() => {
+              aiMessages = [];
+            }}
+            onPickAttachment={() => void handlePickAiAttachment()}
+            onAttachActiveFile={handleAttachActiveFile}
+            onRemoveAttachment={handleRemoveAiAttachment}
+            onInsertCodeIntoEditor={handleInsertCodeIntoEditor}
+            onOpenAiSettings={() => handleOpenSettings("ai")}
+            onClose={() => (aiSidebarOpen = false)}
+          />
+        </div>
+      {/if}
+    </main>
+  {/if}
 
   <ModalDialog
     open={modalOpen}
@@ -1020,17 +1585,45 @@
     onCancel={closeModal}
   />
 
-  <UpdateModal
-    open={updateModalOpen}
-    status={updateStatus}
-    currentVersion={appVersion}
+  <SettingsDialog
+    open={settingsOpen}
+    initialSection={settingsSection}
+    workspaceName={workspace?.name ?? null}
+    workspaceRoot={workspace?.rootPath ?? null}
+    {texFiles}
+    {entryFile}
+    onChangeEntryFile={(path) => {
+      entryFile = path;
+      void runCompile();
+    }}
+    {compilers}
+    {selectedEngine}
+    onChangeEngine={(engine) => {
+      selectedEngine = engine;
+    }}
+    {autoCompileOnSave}
+    onToggleAutoCompile={(enabled) => {
+      autoCompileOnSave = enabled;
+    }}
+    {theme}
+    onChangeTheme={(nextTheme) => {
+      theme = nextTheme;
+    }}
+    {aiSettings}
+    {aiEnvStatus}
+    onChangeAiSettings={(next) => {
+      aiSettings = next;
+    }}
+    onTestAiConnection={handleTestAiConnection}
+    {appVersion}
+    {updateStatus}
     updateInfo={availableUpdate}
-    progress={updateProgress}
-    errorMessage={updateError}
-    onCheckAgain={() => void runUpdateCheck({ silent: false })}
+    {updateProgress}
+    {updateError}
+    onCheckUpdates={() => void runUpdateCheck({ silent: false })}
     onDownloadAndInstall={() => void handleDownloadAndInstall()}
     onRelaunch={() => void handleRelaunch()}
-    onClose={handleCloseUpdateModal}
+    onClose={handleCloseSettings}
   />
 </div>
 
@@ -1077,9 +1670,13 @@
     min-block-size: 0;
     display: flex;
     overflow: hidden;
+    padding: 0 var(--island-gap, 7px) var(--island-gap, 7px) var(--island-gap, 7px);
+    gap: 0;
+    background: var(--bg-app);
   }
 
-  .pane-sidebar {
+  .pane-sidebar,
+  .pane-ai {
     flex-shrink: 0;
     block-size: 100%;
     min-block-size: 0;
@@ -1110,26 +1707,40 @@
   }
 
   .resizer {
-    inline-size: 6px;
+    inline-size: var(--island-gap, 7px);
     flex-shrink: 0;
-    background: var(--bg-app);
-    border-inline: 1px solid var(--border-subtle);
+    background: transparent;
+    border: none;
     cursor: col-resize;
     position: relative;
-    transition: background-color 120ms ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     touch-action: none;
   }
 
+  .resizer::after {
+    content: "";
+    inline-size: 3px;
+    block-size: 36px;
+    border-radius: 999px;
+    background: transparent;
+    transition: background-color 140ms ease, block-size 140ms ease;
+  }
+
   @media (hover: hover) {
-    .resizer:hover {
-      background: var(--accent-soft);
-      border-color: var(--accent);
+    .resizer:hover::after {
+      background: var(--accent);
+      block-size: 56px;
     }
   }
 
   .resizer:focus-visible {
     outline: none;
-    background: var(--accent-soft);
-    border-color: var(--accent);
+  }
+
+  .resizer:focus-visible::after {
+    background: var(--accent);
+    block-size: 64px;
   }
 </style>

@@ -103,3 +103,67 @@
   - `npm run build`: `vite build` succeeded (`dist/index.html`, `dist/assets/index-CbEUi1fZ.css`, `dist/assets/index-CbTYhP9R.js`, `dist/assets/pdf.worker.min-iDqQPrd3.mjs`).
   - `cargo check --all-targets` & `cargo test -- --nocapture`: exited `0`, **8 passed; 0 failed** in `bex_latex_studio_lib`.
 
+---
+
+## Step 6: Declutter Interface & Unified Settings Dialog
+- [x] Move `ThemeMode` into `src/lib/types.ts`
+- [x] Create `src/lib/components/SettingsDialog.svelte` unifying compilation settings, theme selector, software updates, and app info
+- [x] Declutter `src/lib/components/TopBar.svelte` and add a gear Settings button (with subtle update indicator dot)
+- [x] Wire `SettingsDialog.svelte`, preference persistence (`localStorage`), and `Cmd/Ctrl+,` shortcut in `src/App.svelte`
+- [x] Remove obsolete `src/lib/components/UpdateModal.svelte`
+- [x] Verify palette/code audits, `npm run check`, and `npm run build`, and document results
+
+### Step 6 Verification Summary
+- **Unified Settings Dialog (`src/lib/components/SettingsDialog.svelte`, `src/lib/types.ts`)**:
+  - Consolidated Main `.tex` file selector, LaTeX compiler engine selector (with detected engine status pills), `Auto-compile on Save` toggle, 3-state theme selector (`System` with live OS state, `Light`, `Dark`), the full GitHub Releases auto-updater flow (`idle`, `checking`, `available`, `downloading`, `ready-to-restart`, `up-to-date`, `error`), and app metadata (`About Bex`) into a single native `<dialog>` modal.
+- **Decluttered Header (`src/lib/components/TopBar.svelte`, `src/App.svelte`)**:
+  - Removed inline entry file, compiler engine, auto-compile, theme cycle, and update pill controls from the top bar and removed `Check for Updates...` from the `File` menu, replacing them with a single gear Settings button (`Cmd/Ctrl+,`) displaying a subtle update dot when an update is available.
+  - Added `localStorage` persistence for `selectedEngine` (`bex-compiler-engine`) and `autoCompileOnSave` (`bex-auto-compile`) alongside `bex-theme`, and deleted `src/lib/components/UpdateModal.svelte`.
+- **Verified Checks (after final code edits)**:
+  - Grep audit across `src/` for `UpdateModal`, Slate hex colors (`#0f141c`, `#161c26`, `#0f172a`, `#1e293b`, `#f1f5f9`), and `color-mix(in srgb`: **0 matches**.
+  - `npm run check`: `svelte-check` reported **0 errors and 0 warnings**, `tsc --noEmit` exited `0`.
+  - `npm run build`: `vite build` succeeded (`dist/index.html`, `dist/assets/index-rRhYJIyW.css`, `dist/assets/index-BF6c1hoz.js`, `dist/assets/pdf.worker.min-iDqQPrd3.mjs`).
+
+---
+
+## Step 7: JetBrains Islands Home Screen, Theme & MCP AI Agent
+- [x] **Phase 0 (Coordinator Setup & Shared Contracts)**:
+  - [x] Initialize `/swarm` with lightweight workers and write `plan.json`
+  - [x] Add shared Home, Recent Projects/Files, AI & MCP types in `src/lib/types.ts`
+  - [x] Add `reqwest` (`rustls-tls`, `json`) to `src-tauri/Cargo.toml`
+  - [x] Add synchronous inline theme FOUC-prevention script in `index.html`
+- [x] **Worker 1 (`rust-mcp-ai`)**:
+  - [x] Expose `pub(crate) fn write_utf8_atomic` and add `create_new_project` in `src-tauri/src/workspace.rs`
+  - [x] Implement MCP JSON-RPC 2.0 server (`src-tauri/src/mcp.rs`) with 8 LaTeX workspace tools, path traversal guards, and unit tests
+  - [x] Implement multi-provider AI agent (`src-tauri/src/ai_agent.rs`) supporting Google AI Studio (`.env` fallback), Ollama, LM Studio, and vLLM + unit tests
+  - [x] Register new modules & commands in `src-tauri/src/lib.rs` and verify `cargo check` / `cargo test`
+- [x] **Worker 2 (`theme-islands`)**:
+  - [x] Refresh `src/app.css` with neutral JetBrains Islands Dark & Light palettes and island geometry tokens
+  - [x] Style `TopBar.svelte`, `Sidebar.svelte`, `EditorPane.svelte`, `PdfPreview.svelte`, and `ModalDialog.svelte` as floating islands
+- [x] **Worker 3 (`home-screen`)**:
+  - [x] Create `src/lib/recent.ts` for recent projects/files persistence and formatting helpers
+  - [x] Create `src/lib/components/HomeView.svelte` JetBrains-style Welcome screen
+- [x] **Worker 4 (`ai-sidebar-settings`)**:
+  - [x] Create `src/lib/components/AiSidebar.svelte` collapsible AI assistant sidebar with MCP tool traces and file attachments
+  - [x] Add AI Agent & MCP configuration + section navigation to `src/lib/components/SettingsDialog.svelte`
+- [x] **Phase 2 & 3 (Coordinator Integration & Verification)**:
+  - [x] Add new IPC wrappers & browser mocks in `src/lib/api.ts`
+  - [x] Wire Home startup, recent items, Islands layout, AI Sidebar, and MCP sync in `src/App.svelte`
+  - [x] Terminate finished swarm workers and run `npm run check`, `npm run build`, `cargo check --all-targets`, `cargo test`, and security/palette audits
+
+### Step 7 Verification Summary
+- **JetBrains Islands Theme & Home Screen (`src/app.css`, `src/lib/recent.ts`, `src/lib/components/HomeView.svelte`, `src/App.svelte`, `index.html`)**:
+  - App starts on `HomeView.svelte` showing Recent Projects, Recent Files, search filter, New Project / Open Directory / Sample Project actions, Customize tab, Software Updates status, and Settings (`Cmd/Ctrl+,`).
+  - Updated theme tokens to neutral JetBrains Islands Dark (`#101011` canvas, `#1a1a1c` islands) and Islands Light (`#e6e6e7` canvas, `#ffffff` islands) with `--radius-island: 10px` and `--island-gap: 7px`.
+- **MCP JSON-RPC 2.0 Server & Multi-Provider AI Sidebar (`src-tauri/src/mcp.rs`, `src-tauri/src/ai_agent.rs`, `src/lib/components/AiSidebar.svelte`, `src/lib/components/SettingsDialog.svelte`)**:
+  - Implemented 8 workspace-scoped MCP tools (`get_editor_context`, `list_project_files`, `read_file`, `write_file`, `insert_text`, `replace_in_file`, `create_file`, `compile_project`) with strict canonical path-traversal guards and live CodeMirror/PDF sync.
+  - Added multi-provider AI support (Google AI Studio with `GOOGLE_AI_STUDIO` `.env` fallback when user key is empty, Ollama, LM Studio, and vLLM/OpenAI-compatible endpoints) configurable in Settings.
+- **Verified Checks (after final code edits)**:
+  - `npm run check`: `svelte-check` **0 errors and 0 warnings**, `tsc --noEmit` exited `0`.
+  - `npm run build`: `vite build` succeeded (`dist/index.html`, `dist/assets/index-DqKb8LzT.css`, `dist/assets/index-jVVgmv1r.js`, `dist/assets/pdf.worker.min-iDqQPrd3.mjs`).
+  - `cd src-tauri && cargo check --all-targets && cargo test -- --nocapture`: **16 passed; 0 failed**.
+  - Secret leak & palette audits: `SECRET_AUDIT_CLEAN` (zero `.env` key occurrences in `src/`, `src-tauri/src/`, `dist/`) and zero bluish Slate hexes / `color-mix(in srgb`.
+
+
+
+
