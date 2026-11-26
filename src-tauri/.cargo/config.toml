@@ -1,0 +1,2 @@
+[env]
+PKG_CONFIG_PATH = { value = "/opt/homebrew/opt/icu4c/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:/usr/local/opt/icu4c/lib/pkgconfig:/usr/local/lib/pkgconfig", force = false }

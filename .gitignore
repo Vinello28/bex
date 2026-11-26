@@ -1,0 +1,45 @@
+# ==========================================================================
+# Bex LaTeX Studio — .gitignore
+# ==========================================================================
+
+# Dependencies & Node / Vite build outputs
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Rust & Tauri v2 build artifacts
+target/
+src-tauri/target/
+src-tauri/gen/schemas/
+src-tauri/WixTools/
+vcpkg/
+**/vcpkg/
+**/*.rs.bk
+
+# Tauri updater signing private keys & local secrets
+*.key
+.env
+.env.*
+!.env.example
+
+# Bex LaTeX compilation & runtime workspace artifacts
+.bex-build/
+bex-default-workspace/
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+*~

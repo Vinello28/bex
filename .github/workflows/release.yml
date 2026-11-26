@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: "Create GitHub release as a draft"
+        required: false
+        default: false
+        type: boolean
+      prerelease:
+        description: "Mark GitHub release as a prerelease"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: "--target aarch64-apple-darwin"
+          - platform: ubuntu-22.04
+            args: ""
+          - platform: windows-latest
+            args: ""
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install macOS dependencies for Tectonic
+        if: runner.os == 'macOS'
+        run: |
+          brew install pkg-config icu4c harfbuzz freetype graphite2 fontconfig openssl@3
+          echo "PKG_CONFIG_PATH=/opt/homebrew/opt/icu4c/lib/pkgconfig:/opt/homebrew/opt/openssl@3/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:/usr/local/opt/icu4c/lib/pkgconfig:/usr/local/opt/openssl@3/lib/pkgconfig:/usr/local/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      - name: Install Linux dependencies for Tauri and Tectonic
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            pkg-config \
+            libicu-dev \
+            libharfbuzz-dev \
+            libharfbuzz-icu0 \
+            libfreetype6-dev \
+            libgraphite2-dev \
+            libfontconfig1-dev \
+            libssl-dev
+
+      - name: Cache Windows vcpkg dependencies
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: src-tauri/target/vcpkg
+          key: ${{ runner.os }}-vcpkg-${{ hashFiles('src-tauri/Cargo.toml') }}
+
+      - name: Build Windows vcpkg dependencies for Tectonic
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: src-tauri
+        run: |
+          if (-not (Get-Command cargo-vcpkg -ErrorAction SilentlyContinue)) {
+            cargo install cargo-vcpkg
+          }
+          cargo vcpkg build
+          $vcpkgRoot = Join-Path (Get-Location) "target\vcpkg"
+          "TECTONIC_DEP_BACKEND=vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VCPKGRS_TRIPLET=x64-windows-static-md" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build and publish Tauri release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: v__VERSION__
+          releaseName: "Bex LaTeX Studio v__VERSION__"
+          releaseBody: "See installer downloads and automatic update artifacts below."
+          releaseDraft: ${{ inputs.draft == true }}
+          prerelease: ${{ inputs.prerelease == true }}
+          args: ${{ matrix.args }}

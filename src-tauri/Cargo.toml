@@ -1,0 +1,50 @@
+[package]
+name = "bex-latex-studio"
+version = "0.1.0"
+description = "Cross-platform Live LaTeX Editor in Tauri v2, Svelte 5, and Rust"
+authors = ["Bex LaTeX Studio"]
+repository = "https://github.com/Vinello28/bex"
+edition = "2021"
+
+[lib]
+name = "bex_latex_studio_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-process = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+regex = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "fs", "io-util"] }
+tectonic = "0.17"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"
+
+[package.metadata.vcpkg]
+git = "https://github.com/microsoft/vcpkg"
+branch = "master"
+install = [
+  "fontconfig",
+  "harfbuzz[icu,graphite2]",
+  "freetype",
+  "graphite2",
+  "icu",
+  "openssl",
+  "zlib",
+  "libpng",
+]
+
+[package.metadata.vcpkg.target.x86_64-pc-windows-msvc]
+triplet = "x64-windows-static-md"
+
+# Embedded Rust Tectonic engine (`tectonic` crate) runs directly in-process
+# (requires system C/C++ libraries: icu-uc, harfbuzz, freetype2, graphite2, fontconfig
+# configured via pkg-config / `.cargo/config.toml` / vcpkg), alongside external CLI
+# support for local pdflatex, xelatex, and lualatex distributions.
