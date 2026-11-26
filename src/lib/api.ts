@@ -1,8 +1,10 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
+import { clampUiZoom } from "./uiZoom";
 import type {
   AiAgentRequest,
   AiAgentResponse,
@@ -241,9 +243,13 @@ function bytesToBase64(bytes: Uint8Array): string {
 
 /** Build a valid single-page PDF document for browser preview mode. */
 function buildPreviewPdfBase64(entryFile: string, source: string): string {
-  const titleMatch = source.match(/\\title\{([^}]*)\}/);
+  const strippedSource = source
+    .split(/\r?\n/)
+    .map((line) => line.replace(/(^|[^\\])%.*$/, "$1"))
+    .join("\n");
+  const titleMatch = strippedSource.match(/\\title\{([^}]*)\}/);
   const title = titleMatch?.[1]?.trim() || entryFile;
-  const rawLines = source
+  const rawLines = strippedSource
     .replace(/\\(begin|end)\{[^}]*\}/g, "")
     .replace(/\\[a-zA-Z]+\*?(?:\[[^\]]*\])?/g, " ")
     .replace(/[{}]/g, "")
@@ -929,4 +935,21 @@ export async function downloadAndInstallAppUpdate(
 export async function relaunchApp(): Promise<void> {
   if (!isTauriRuntime()) return;
   await relaunch();
+}
+
+// --- UI Zoom API ---
+
+/**
+ * Applies the clamped UI zoom factor using Tauri's native webview zoom in
+ * desktop builds, or CSS `zoom` in browser preview mode.
+ */
+export async function setWebviewZoom(scaleFactor: number): Promise<void> {
+  const safeScale = clampUiZoom(scaleFactor);
+  if (isTauriRuntime()) {
+    await getCurrentWebview().setZoom(safeScale);
+    return;
+  }
+  if (typeof document !== "undefined") {
+    document.documentElement.style.zoom = safeScale === 1 ? "" : String(safeScale);
+  }
 }

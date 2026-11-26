@@ -12,6 +12,18 @@
           if (m) m.content = t;
           document.documentElement.dataset.theme = t;
         }
+        if (!("__TAURI_INTERNALS__" in window)) {
+          var rawZoom = localStorage.getItem("bex-ui-zoom");
+          if (rawZoom !== null) {
+            var parsedZoom = Number.parseFloat(rawZoom);
+            if (Number.isFinite(parsedZoom)) {
+              var z = Math.round(Math.min(1.8, Math.max(0.7, parsedZoom)) * 100) / 100;
+              if (z !== 1) {
+                document.documentElement.style.zoom = String(z);
+              }
+            }
+          }
+        }
       } catch (e) {}
     </script>
     <link rel="icon" type="image/svg+xml" href="/bex-bottle.svg" />
