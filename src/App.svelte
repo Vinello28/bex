@@ -65,9 +65,21 @@
     relaunchApp,
     renamePath,
     saveTextFile,
+    setWebviewZoom,
     synctexForward,
     synctexInverse,
   } from "./lib/api";
+  import {
+    clampUiZoom,
+    formatUiZoomPercent,
+    loadUiZoom,
+    matchUiZoomShortcut,
+    saveUiZoom,
+    stepUiZoom,
+    UI_ZOOM_DEFAULT,
+    UI_ZOOM_MAX,
+    UI_ZOOM_MIN,
+  } from "./lib/uiZoom";
 
   const THEME_STORAGE_KEY = "bex-theme";
   const ENGINE_STORAGE_KEY = "bex-compiler-engine";
@@ -272,6 +284,13 @@
 
   let theme = $state<ThemeMode>(loadInitialTheme());
 
+  // UI Zoom state and timers
+  let uiZoom = $state<number>(loadUiZoom());
+  let zoomHudVisible = $state<boolean>(false);
+  let zoomAnnounceText = $state<string>("");
+  let zoomHudTimer: ReturnType<typeof setTimeout> | null = null;
+  let zoomAnnounceTimer: ReturnType<typeof setTimeout> | null = null;
+
   // Modal Dialog state
   let modalOpen = $state<boolean>(false);
   let modalMode = $state<ModalMode>(null);
@@ -341,6 +360,38 @@
     }
   });
 
+  // Persist UI zoom and apply to Tauri webview (or CSS zoom in browser preview)
+  $effect(() => {
+    const clamped = clampUiZoom(uiZoom);
+    saveUiZoom(clamped);
+    void setWebviewZoom(clamped).catch((err) => {
+      console.warn("Failed to apply UI zoom:", err);
+    });
+  });
+
+  function applyUiZoom(nextScale: number, showHud = true) {
+    const clamped = clampUiZoom(nextScale);
+    uiZoom = clamped;
+    if (showHud) {
+      zoomHudVisible = true;
+      if (zoomHudTimer !== null) {
+        clearTimeout(zoomHudTimer);
+      }
+      zoomHudTimer = setTimeout(() => {
+        zoomHudVisible = false;
+        zoomHudTimer = null;
+      }, 1500);
+
+      if (zoomAnnounceTimer !== null) {
+        clearTimeout(zoomAnnounceTimer);
+      }
+      zoomAnnounceTimer = setTimeout(() => {
+        zoomAnnounceText = `Interface scale ${formatUiZoomPercent(clamped)}`;
+        zoomAnnounceTimer = null;
+      }, 350);
+    }
+  }
+
   // Listen to OS color-scheme changes while in "system" mode
   $effect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -353,10 +404,24 @@
     return () => mq.removeEventListener("change", handleMediaChange);
   });
 
-  // Global keyboard shortcuts (Cmd/Ctrl+S save, Cmd/Ctrl+B sidebar, Cmd/Ctrl+Shift+A AI, Cmd/Ctrl+, Settings)
+  // Global keyboard shortcuts (Cmd/Ctrl +/-/0 UI zoom, Cmd/Ctrl+S save, Cmd/Ctrl+B sidebar, Cmd/Ctrl+Shift+A AI, Cmd/Ctrl+, Settings)
   $effect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
+
+      const zoomAction = matchUiZoomShortcut(event);
+      if (zoomAction) {
+        event.preventDefault();
+        if (zoomAction === "in") {
+          applyUiZoom(stepUiZoom(uiZoom, "in"), true);
+        } else if (zoomAction === "out") {
+          applyUiZoom(stepUiZoom(uiZoom, "out"), true);
+        } else {
+          applyUiZoom(UI_ZOOM_DEFAULT, true);
+        }
+        return;
+      }
+
       const isMod = event.metaKey || event.ctrlKey;
       if (!isMod || event.altKey) return;
 
@@ -391,6 +456,16 @@
 
   onMount(() => {
     void bootstrap();
+    return () => {
+      if (zoomHudTimer !== null) {
+        clearTimeout(zoomHudTimer);
+        zoomHudTimer = null;
+      }
+      if (zoomAnnounceTimer !== null) {
+        clearTimeout(zoomAnnounceTimer);
+        zoomAnnounceTimer = null;
+      }
+    };
   });
 
   async function bootstrap() {
@@ -1749,6 +1824,10 @@
     onChangeTheme={(nextTheme) => {
       theme = nextTheme;
     }}
+    {uiZoom}
+    onZoomIn={() => applyUiZoom(stepUiZoom(uiZoom, "in"), false)}
+    onZoomOut={() => applyUiZoom(stepUiZoom(uiZoom, "out"), false)}
+    onResetZoom={() => applyUiZoom(UI_ZOOM_DEFAULT, false)}
     {aiSettings}
     {aiEnvStatus}
     onChangeAiSettings={(next) => {
@@ -1771,6 +1850,26 @@
     onRefreshCacheInfo={() => void refreshCompileCacheInfo()}
     onClearCompileCache={(scope) => void handleClearCompileCache(scope)}
   />
+
+  {#if zoomHudVisible}
+    <div class="zoom-hud">
+      <span class="zoom-hud-label">UI {formatUiZoomPercent(uiZoom)}</span>
+      {#if Math.abs(uiZoom - UI_ZOOM_DEFAULT) >= 0.001}
+        <button
+          type="button"
+          class="zoom-hud-reset"
+          aria-label="Reset interface scale to 100%"
+          onclick={() => applyUiZoom(UI_ZOOM_DEFAULT, true)}
+        >
+          Reset
+        </button>
+      {/if}
+    </div>
+  {/if}
+
+  <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+    {zoomAnnounceText}
+  </div>
 </div>
 
 <style>
@@ -1827,6 +1926,14 @@
     block-size: 100%;
     min-block-size: 0;
     overflow: hidden;
+  }
+
+  .pane-sidebar {
+    max-inline-size: min(420px, 38vw);
+  }
+
+  .pane-ai {
+    max-inline-size: min(560px, 45vw);
   }
 
   .split-area {
@@ -1888,5 +1995,69 @@
   .resizer:focus-visible::after {
     background: var(--accent);
     block-size: 64px;
+  }
+
+  .zoom-hud {
+    position: fixed;
+    inset-block-end: 16px;
+    inset-inline-end: 16px;
+    z-index: 40;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-popover);
+    font-size: 12px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    animation: zoom-hud-in 120ms ease-out;
+  }
+
+  .zoom-hud-label {
+    user-select: none;
+  }
+
+  .zoom-hud-reset {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-block-size: 24px;
+    min-inline-size: 24px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-muted);
+    color: var(--text-primary);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 120ms ease;
+  }
+
+  @media (hover: hover) {
+    .zoom-hud-reset:hover {
+      background: var(--bg-hover);
+    }
+  }
+
+  @keyframes zoom-hud-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .zoom-hud {
+      animation: none;
+    }
   }
 </style>

@@ -15,10 +15,13 @@
     FolderGit2,
     Info,
     LoaderCircle,
+    Minus,
     Monitor,
     Moon,
     Palette,
+    Plus,
     RefreshCw,
+    RotateCcw,
     RotateCw,
     Settings,
     Sparkles,
@@ -26,6 +29,12 @@
     Trash2,
     X,
   } from "@lucide/svelte";
+  import {
+    formatUiZoomPercent,
+    UI_ZOOM_DEFAULT,
+    UI_ZOOM_MAX,
+    UI_ZOOM_MIN,
+  } from "../uiZoom";
   import type {
     AiEnvStatus,
     AiProviderId,
@@ -53,6 +62,10 @@
     onToggleAutoCompile: (enabled: boolean) => void;
     theme: ThemeMode;
     onChangeTheme: (theme: ThemeMode) => void;
+    uiZoom?: number;
+    onZoomIn?: () => void;
+    onZoomOut?: () => void;
+    onResetZoom?: () => void;
     appVersion: string;
     updateStatus: UpdateStatus;
     updateInfo: AppUpdateInfo | null;
@@ -106,6 +119,10 @@
     onToggleAutoCompile,
     theme,
     onChangeTheme,
+    uiZoom = UI_ZOOM_DEFAULT,
+    onZoomIn,
+    onZoomOut,
+    onResetZoom,
     appVersion,
     updateStatus,
     updateInfo,
@@ -705,6 +722,55 @@
             </label>
           </div>
         </fieldset>
+
+        <hr class="row-sep" />
+
+        <div class="field-row">
+          <div class="field-info">
+            <span id="settings-ui-zoom-label" class="field-label">Interface Scale</span>
+            <p class="field-hint">
+              Zoom the entire interface ({modKey}+ / {modKey}- / {modKey}0)
+            </p>
+          </div>
+          <div
+            class="zoom-controls"
+            role="group"
+            aria-labelledby="settings-ui-zoom-label"
+          >
+            <button
+              type="button"
+              class="zoom-step-btn"
+              aria-label="Zoom out interface"
+              title={`Zoom Out (${modKey}-)`}
+              disabled={uiZoom <= UI_ZOOM_MIN}
+              onclick={() => onZoomOut?.()}
+            >
+              <Minus size={14} aria-hidden="true" />
+            </button>
+            <span class="zoom-value">{formatUiZoomPercent(uiZoom)}</span>
+            <button
+              type="button"
+              class="zoom-step-btn"
+              aria-label="Zoom in interface"
+              title={`Zoom In (${modKey}+)`}
+              disabled={uiZoom >= UI_ZOOM_MAX}
+              onclick={() => onZoomIn?.()}
+            >
+              <Plus size={14} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              class="zoom-reset-btn"
+              aria-label="Reset interface scale to 100%"
+              title={`Reset Zoom (${modKey}0)`}
+              disabled={Math.abs(uiZoom - UI_ZOOM_DEFAULT) < 0.001}
+              onclick={() => onResetZoom?.()}
+            >
+              <RotateCcw size={12} aria-hidden="true" />
+              <span>Reset</span>
+            </button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -1188,6 +1254,12 @@
               <span aria-hidden="true">·</span>
               <span><kbd>Double-click PDF</kbd> Jump to source</span>
               <span aria-hidden="true">·</span>
+              <span><kbd>{modKey}ù</kbd> / <kbd>{modKey}/</kbd> Toggle Comment</span>
+              <span aria-hidden="true">·</span>
+              <span><kbd>{modKey}+</kbd> / <kbd>{modKey}-</kbd> UI Zoom</span>
+              <span aria-hidden="true">·</span>
+              <span><kbd>{modKey}0</kbd> Reset Zoom</span>
+              <span aria-hidden="true">·</span>
               <span><kbd>{modKey},</kbd> Settings</span>
             </dd>
           </div>
@@ -1638,6 +1710,64 @@
 
   .theme-card.selected .theme-sub {
     color: var(--text-secondary);
+  }
+
+  .zoom-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .zoom-step-btn,
+  .zoom-reset-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-inline-size: 28px;
+    min-block-size: 28px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-muted);
+    color: var(--text-primary);
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+
+  .zoom-step-btn {
+    inline-size: 28px;
+    padding: 0;
+  }
+
+  .zoom-reset-btn {
+    gap: 5px;
+    padding: 0 9px;
+  }
+
+  .zoom-step-btn:disabled,
+  .zoom-reset-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  @media (hover: hover) {
+    .zoom-step-btn:not(:disabled):hover,
+    .zoom-reset-btn:not(:disabled):hover {
+      background: var(--bg-hover);
+      border-color: var(--border-strong);
+    }
+  }
+
+  .zoom-value {
+    min-inline-size: 46px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
   }
 
   .version-pill {
