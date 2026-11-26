@@ -79,7 +79,10 @@ Bex LaTeX Studio uses **`tauri-plugin-updater`** and **`tauri-plugin-process`** 
 ### Signing Secrets Setup
 Before running the release workflow, configure the signing secrets in your GitHub repository (**Settings → Secrets and variables → Actions**):
 
-1. Copy the contents of `~/.tauri/bex-latex-studio.key` and save it as the repository secret **`TAURI_SIGNING_PRIVATE_KEY`**.
+1. Set **`TAURI_SIGNING_PRIVATE_KEY`** from `~/.tauri/bex-latex-studio.key` (recommended via GitHub CLI to avoid copy/paste newline issues):
+   ```bash
+   gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/bex-latex-studio.key
+   ```
 2. If your key is encrypted with a passphrase, also add **`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`**.
 3. If you prefer to generate a fresh keypair:
    ```bash
@@ -88,19 +91,18 @@ Before running the release workflow, configure the signing secrets in your GitHu
    Then replace `plugins.updater.pubkey` in `src-tauri/tauri.conf.json` with the newly generated public key and update `TAURI_SIGNING_PRIVATE_KEY` in GitHub Secrets.
 
 ### Cutting a Release
-1. Bump the version consistently (without a `v` prefix) in:
-   - `package.json`
-   - `src-tauri/tauri.conf.json`
-   - `src-tauri/Cargo.toml`
-2. Commit the version bump:
+The release version is derived **solely** from the `v*` git tag — you do not need to bump `package.json`, `src-tauri/tauri.conf.json`, or `src-tauri/Cargo.toml` manually.
+
+1. Ensure your changes are committed and pushed to your branch:
    ```bash
-   git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
-   git commit -m "chore: release v0.1.0"
    git push
    ```
-3. Create and push a `v*` tag:
+2. Create and push a SemVer `v*` tag:
    ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
+   git tag v0.2.0
+   git push origin v0.2.0
    ```
-   Pushing a `v*` tag runs `.github/workflows/release.yml` with `releaseDraft: false`, publishing the GitHub Release directly so `releases/latest/download/latest.json` is immediately live for auto-updates. You can also trigger a draft or prerelease build manually from the GitHub Actions **Run workflow** menu.
+   Pushing a `v*` tag triggers `.github/workflows/release.yml`, which:
+   - Fails fast upfront if `TAURI_SIGNING_PRIVATE_KEY` is missing or malformed, or if the tag is not a valid `vX.Y.Z` SemVer tag.
+   - Automatically syncs the tag version (without the `v` prefix) into `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` right before building.
+   - Publishes the GitHub Release (`v<TAG_VERSION>`) with platform installers, `.sig` files, and `latest.json` (marking `-prerelease` tags as GitHub prereleases automatically). You can also trigger a draft or prerelease build manually via **Run workflow** (`workflow_dispatch`) from a `v*` tag.

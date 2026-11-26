@@ -977,7 +977,7 @@ pub async fn dispatch_jsonrpc(
                     },
                     "serverInfo": {
                         "name": "bex-mcp-latex-server",
-                        "version": "0.1.0"
+                        "version": env!("CARGO_PKG_VERSION")
                     }
                 })),
                 error: None,

@@ -719,14 +719,16 @@ async function releasePendingUpdate(): Promise<void> {
   await prev.close().catch(() => {});
 }
 
+export const FALLBACK_APP_VERSION = __APP_VERSION__;
+
 export async function getCurrentAppVersion(): Promise<string> {
   if (!isTauriRuntime()) {
-    return "0.1.0";
+    return FALLBACK_APP_VERSION;
   }
   try {
     return await getVersion();
   } catch {
-    return "0.1.0";
+    return FALLBACK_APP_VERSION;
   }
 }
 
@@ -734,7 +736,7 @@ export async function checkForAppUpdate(): Promise<AppUpdateInfo> {
   if (!isTauriRuntime()) {
     return {
       available: false,
-      currentVersion: "0.1.0",
+      currentVersion: FALLBACK_APP_VERSION,
       version: null,
       date: null,
       body: null,

@@ -48,6 +48,7 @@
     detectCompilers,
     downloadAndInstallAppUpdate,
     exportPdf,
+    FALLBACK_APP_VERSION,
     getCurrentAppVersion,
     initDefaultWorkspace,
     listWorkspaceFiles,
@@ -273,7 +274,7 @@
   // Settings Dialog & App Auto-Updater state
   let settingsOpen = $state<boolean>(false);
   let settingsSection = $state<SettingsSectionId | null>(null);
-  let appVersion = $state<string>("0.1.0");
+  let appVersion = $state<string>(FALLBACK_APP_VERSION);
   let availableUpdate = $state<AppUpdateInfo | null>(null);
   let updateStatus = $state<UpdateStatus>("idle");
   let updateProgress = $state<UpdateProgress | null>(null);

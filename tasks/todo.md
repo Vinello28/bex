@@ -164,6 +164,26 @@
   - `cd src-tauri && cargo check --all-targets && cargo test -- --nocapture`: **16 passed; 0 failed**.
   - Secret leak & palette audits: `SECRET_AUDIT_CLEAN` (zero `.env` key occurrences in `src/`, `src-tauri/src/`, `dist/`) and zero bluish Slate hexes / `color-mix(in srgb`.
 
+---
+
+## Step 8: Tag-Driven Release Versioning & Signing Key Verification
+- [x] Configure `TAURI_SIGNING_PRIVATE_KEY` GitHub Actions repository secret from `~/.tauri/bex-latex-studio.key`
+- [x] Add fail-fast signing key validation and `v*` tag SemVer derivation to `.github/workflows/release.yml` (with `fetch-depth: 0` checkout)
+- [x] Sync `RELEASE_VERSION` into `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` right before `tauri-apps/tauri-action@v0` (preserving `npm`, Rust, and `vcpkg` caches)
+- [x] Replace hardcoded `"0.1.0"` strings with `env!("CARGO_PKG_VERSION")` (`src-tauri/src/mcp.rs`) and `__APP_VERSION__` (`vite.config.ts`, `src/vite-env.d.ts`, `src/lib/api.ts`, `src/App.svelte`)
+- [x] Update `README.md` with CLI secret setup and tag-only release process
+- [x] Run YAML validation, version-sync dry run, `npm run check`, `npm run build`, `cargo check --all-targets`, and `cargo test -- --nocapture`
+
+### Step 8 Verification Summary
+- **GitHub Secret**: Set `TAURI_SIGNING_PRIVATE_KEY` on `Vinello28/bex` from `~/.tauri/bex-latex-studio.key` via `gh secret set` and verified presence with `gh secret list -a actions`.
+- **Pipeline & Version Sync (`.github/workflows/release.yml`)**: Added upfront signing-key presence/header validation and `v*` SemVer tag resolution (`RELEASE_TAG`, `RELEASE_VERSION`), injected `RELEASE_VERSION` into `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` immediately before `tauri-apps/tauri-action@v0`, and configured automatic prerelease detection for SemVer pre-release tags.
+- **Verified Checks**:
+  - `ruby -ryaml -e 'YAML.load_file(".github/workflows/release.yml")'`: `YAML_OK`.
+  - Temporary dry-run sync of `0.2.0`: updated `package.json`, `src-tauri/tauri.conf.json`, and only `[package] version` in `src-tauri/Cargo.toml`.
+  - `npm run check`: `svelte-check` **0 errors and 0 warnings**, `tsc --noEmit` exited `0`.
+  - `npm run build`: `vite build` succeeded (`dist/index.html`, `dist/assets/index-DqKb8LzT.css`, `dist/assets/index-5c0Tux5l.js`, `dist/assets/pdf.worker.min-iDqQPrd3.mjs`).
+  - `cd src-tauri && cargo check --all-targets && cargo test -- --nocapture`: exited `0`, **16 passed; 0 failed** in `bex_latex_studio_lib`.
+
 
 
 
