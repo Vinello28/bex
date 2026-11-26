@@ -1451,6 +1451,65 @@ warning: deprecated macro used on input line 50
     }
 
     #[tokio::test]
+    async fn tectonic_excludes_percent_commented_lines() {
+        let compilers = detect_compilers().await.expect("detect compilers");
+        assert!(compilers.iter().any(|c| c.id == "tectonic" && c.available));
+
+        let dir = TempDirGuard::new("tectonic-comments");
+        let commented_doc = concat!(
+            "\\documentclass{article}\n",
+            "\\begin{document}\n",
+            "Hello 100\\% valid text.\n",
+            "% \\undefinedmacrothatwouldfail\n",
+            "% Multi-line commented block line 1\n",
+            "% \\anotherundefinedmacro{arg}\n",
+            "\\end{document}\n",
+        );
+        let tex_path = dir.path.join("comments.tex");
+        std::fs::write(&tex_path, commented_doc).unwrap();
+
+        let res = compile_latex(CompileRequest {
+            root_dir: dir.path.to_string_lossy().into_owned(),
+            entry_file: "comments.tex".to_string(),
+            engine: "tectonic".to_string(),
+        })
+        .await
+        .expect("compile_latex commented response");
+
+        assert!(
+            res.success,
+            "Expected Tectonic compilation to succeed when invalid macros are %-commented, log:\n{}",
+            res.log_output
+        );
+        assert_eq!(res.engine_used, "tectonic");
+        assert!(
+            res.pdf_base64.is_some(),
+            "Expected compiled PDF when invalid macros are %-commented"
+        );
+
+        let uncommented_doc = commented_doc.replacen(
+            "% \\undefinedmacrothatwouldfail",
+            "\\undefinedmacrothatwouldfail",
+            1,
+        );
+        std::fs::write(&tex_path, uncommented_doc).unwrap();
+
+        let res_uncommented = compile_latex(CompileRequest {
+            root_dir: dir.path.to_string_lossy().into_owned(),
+            entry_file: "comments.tex".to_string(),
+            engine: "tectonic".to_string(),
+        })
+        .await
+        .expect("compile_latex uncommented response");
+
+        assert!(
+            !res_uncommented.success,
+            "Expected removing '% ' prefix from \\undefinedmacrothatwouldfail to fail compilation"
+        );
+        assert!(res_uncommented.pdf_base64.is_none());
+    }
+
+    #[tokio::test]
     async fn incremental_compile_preserves_aux_removes_xdv_and_reduces_passes() {
         let dir = TempDirGuard::new("tectonic-incremental");
         seed_sample_project(&dir.path).expect("seed sample project");
