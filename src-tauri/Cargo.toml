@@ -24,6 +24,8 @@ regex = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "fs", "io-util"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tectonic = "0.17"
+flate2 = "1"
+tectonic_bridge_core = "0.5"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
@@ -49,3 +51,6 @@ triplet = "x64-windows-static-md"
 # (requires system C/C++ libraries: icu-uc, harfbuzz, freetype2, graphite2, fontconfig
 # configured via pkg-config / `.cargo/config.toml` / vcpkg), alongside external CLI
 # support for local pdflatex, xelatex, and lualatex distributions.
+
+[profile.dev.package."*"]
+opt-level = 3

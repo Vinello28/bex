@@ -8,6 +8,8 @@ import type {
   AiAgentResponse,
   AiEnvStatus,
   AppUpdateInfo,
+  CacheBucketInfo,
+  CompileCacheInfo,
   CompileRequest,
   CompileResponse,
   CompilerInfo,
@@ -15,6 +17,10 @@ import type {
   LatexDiagnostic,
   McpToolInfo,
   SaveResult,
+  SyncTexForwardRequest,
+  SyncTexInverseRequest,
+  SyncTexLocation,
+  SyncTexRect,
   UpdateProgress,
   WorkspaceInfo,
 } from "./types";
@@ -26,6 +32,40 @@ export function isTauriRuntime(): boolean {
 // --- Browser preview virtual workspace (used only when !isTauriRuntime()) ---
 
 const MOCK_ROOT = "/mock-workspace";
+let mockProjectCacheBytes = 245_760;
+let mockProjectCacheFiles = 6;
+let mockTectonicCacheBytes = 48_234_496;
+let mockTectonicCacheFiles = 142;
+
+function buildMockCompileCacheInfo(rootDir: string | null): CompileCacheInfo {
+  const normRoot = rootDir ? normalizeMockPath(rootDir) : null;
+  const projectCache: CacheBucketInfo = normRoot
+    ? {
+        path: `${normRoot}/.bex-build`,
+        bytes: mockProjectCacheBytes,
+        fileCount: mockProjectCacheFiles,
+        exists: mockProjectCacheBytes > 0,
+      }
+    : {
+        path: null,
+        bytes: 0,
+        fileCount: 0,
+        exists: false,
+      };
+
+  const tectonicCache: CacheBucketInfo = {
+    path: "/mock-cache/Tectonic",
+    bytes: mockTectonicCacheBytes,
+    fileCount: mockTectonicCacheFiles,
+    exists: mockTectonicCacheBytes > 0,
+  };
+
+  return {
+    projectCache,
+    tectonicCache,
+    totalBytes: projectCache.bytes + tectonicCache.bytes,
+  };
+}
 const mockDirs = new Set<string>([`${MOCK_ROOT}/sections`]);
 const mockFiles = new Map<string, string>([
   [
@@ -504,6 +544,13 @@ export async function compileLatex(request: CompileRequest): Promise<CompileResp
         : `Output written on ${request.entryFile.replace(/\.tex$/i, ".pdf")} (1 page).`,
     ];
 
+    if (!hasError) {
+      mockProjectCacheBytes = Math.max(mockProjectCacheBytes, 245_760);
+      mockProjectCacheFiles = Math.max(mockProjectCacheFiles, 6);
+      mockTectonicCacheBytes = Math.max(mockTectonicCacheBytes, 48_234_496);
+      mockTectonicCacheFiles = Math.max(mockTectonicCacheFiles, 142);
+    }
+
     return {
       success: !hasError,
       pdfBase64,
@@ -512,9 +559,67 @@ export async function compileLatex(request: CompileRequest): Promise<CompileResp
       diagnostics,
       durationMs,
       engineUsed: request.engine,
+      synctexAvailable: !hasError,
     };
   }
   return invoke<CompileResponse>("compile_latex", { request });
+}
+
+export async function synctexForward(
+  request: SyncTexForwardRequest
+): Promise<SyncTexRect[]> {
+  if (!isTauriRuntime()) {
+    return [
+      {
+        page: 1,
+        x: 72,
+        y: 120 + Math.min(600, request.line * 14),
+        width: 420,
+        height: 16,
+      },
+    ];
+  }
+  return invoke<SyncTexRect[]>("synctex_forward", { request });
+}
+
+export async function synctexInverse(
+  request: SyncTexInverseRequest
+): Promise<SyncTexLocation | null> {
+  if (!isTauriRuntime()) {
+    return {
+      file: request.entryFile,
+      line: Math.max(1, Math.round((request.y - 100) / 14)),
+      column: 1,
+    };
+  }
+  return invoke<SyncTexLocation | null>("synctex_inverse", { request });
+}
+
+export async function getCompileCacheInfo(
+  rootDir: string | null
+): Promise<CompileCacheInfo> {
+  if (!isTauriRuntime()) {
+    return buildMockCompileCacheInfo(rootDir);
+  }
+  return invoke<CompileCacheInfo>("get_compile_cache_info", { rootDir });
+}
+
+export async function clearCompileCache(
+  rootDir: string | null,
+  scope: "project" | "tectonic" | "all"
+): Promise<CompileCacheInfo> {
+  if (!isTauriRuntime()) {
+    if (scope === "project" || scope === "all") {
+      mockProjectCacheBytes = 0;
+      mockProjectCacheFiles = 0;
+    }
+    if (scope === "tectonic" || scope === "all") {
+      mockTectonicCacheBytes = 0;
+      mockTectonicCacheFiles = 0;
+    }
+    return buildMockCompileCacheInfo(rootDir);
+  }
+  return invoke<CompileCacheInfo>("clear_compile_cache", { rootDir, scope });
 }
 
 export async function pickWorkspaceFolder(): Promise<string | null> {

@@ -23,6 +23,7 @@
     Settings,
     Sparkles,
     Sun,
+    Trash2,
     X,
   } from "@lucide/svelte";
   import type {
@@ -30,6 +31,7 @@
     AiProviderId,
     AiSettings,
     AppUpdateInfo,
+    CompileCacheInfo,
     CompilerInfo,
     SettingsSectionId,
     ThemeMode,
@@ -60,6 +62,13 @@
     onDownloadAndInstall: () => void;
     onRelaunch: () => void;
     onClose: () => void;
+    // Compilation cache props
+    compileCacheInfo?: CompileCacheInfo | null;
+    isLoadingCacheInfo?: boolean;
+    clearingCacheScope?: "project" | "tectonic" | "all" | null;
+    cacheNotice?: string | null;
+    onRefreshCacheInfo?: () => void;
+    onClearCompileCache?: (scope: "project" | "tectonic" | "all") => void;
     // AI and MCP section props
     initialSection?: SettingsSectionId | null;
     aiSettings?: AiSettings;
@@ -106,6 +115,12 @@
     onDownloadAndInstall,
     onRelaunch,
     onClose,
+    compileCacheInfo = null,
+    isLoadingCacheInfo = false,
+    clearingCacheScope = null,
+    cacheNotice = null,
+    onRefreshCacheInfo,
+    onClearCompileCache,
     initialSection = null,
     aiSettings = defaultAiSettings,
     aiEnvStatus = defaultAiEnvStatus,
@@ -318,6 +333,10 @@
     return `${value >= 10 || unitIdx === 0 ? Math.round(value) : value.toFixed(1)} ${units[unitIdx]}`;
   }
 
+  function formatFileCount(count: number): string {
+    return `${count} ${count === 1 ? "file" : "files"}`;
+  }
+
   function handleDialogCancel(event: Event) {
     if (isDownloading) {
       event.preventDefault();
@@ -500,6 +519,120 @@
               onToggleAutoCompile((e.currentTarget as HTMLInputElement).checked)}
           />
         </label>
+
+        <hr class="row-sep" />
+
+        <div class="cache-section">
+          <div class="cache-header">
+            <div class="cache-header-left">
+              <span class="field-label">Compilation Cache</span>
+              <span class="cache-total-badge">
+                {isLoadingCacheInfo
+                  ? "..."
+                  : formatBytes(compileCacheInfo?.totalBytes ?? 0)}
+              </span>
+            </div>
+            <button
+              type="button"
+              class="btn btn-secondary cache-refresh-btn"
+              disabled={isLoadingCacheInfo || clearingCacheScope !== null}
+              aria-label="Refresh compilation cache info"
+              title="Refresh cache sizes"
+              onclick={() => onRefreshCacheInfo?.()}
+            >
+              <RefreshCw
+                size={12}
+                class={isLoadingCacheInfo ? "spin-icon" : undefined}
+                aria-hidden="true"
+              />
+              <span>Refresh</span>
+            </button>
+          </div>
+
+          <div class="cache-row">
+            <div class="cache-row-info">
+              <div class="cache-row-title-line">
+                <span class="cache-row-title">
+                  Project build cache <code>.bex-build</code>
+                </span>
+                <span
+                  class="cache-meta"
+                  title={compileCacheInfo?.projectCache.path ?? undefined}
+                >
+                  {#if !workspaceRoot}
+                    No project open
+                  {:else if isLoadingCacheInfo && !compileCacheInfo}
+                    ...
+                  {:else}
+                    {formatBytes(compileCacheInfo?.projectCache.bytes ?? 0)} · {formatFileCount(compileCacheInfo?.projectCache.fileCount ?? 0)}
+                  {/if}
+                </span>
+              </div>
+              <p class="field-hint">
+                Incremental <code>.aux</code>, <code>.toc</code>, <code>.bbl</code> &amp; SyncTeX cache for faster builds
+              </p>
+            </div>
+            <button
+              type="button"
+              class="btn btn-secondary cache-clear-btn"
+              disabled={!workspaceRoot ||
+                !compileCacheInfo?.projectCache.exists ||
+                compileCacheInfo.projectCache.bytes === 0 ||
+                clearingCacheScope !== null}
+              onclick={() => onClearCompileCache?.("project")}
+            >
+              {#if clearingCacheScope === "project" || clearingCacheScope === "all"}
+                <LoaderCircle size={12} class="spin-icon" aria-hidden="true" />
+              {:else}
+                <Trash2 size={12} aria-hidden="true" />
+              {/if}
+              <span>Clear</span>
+            </button>
+          </div>
+
+          <div class="cache-row">
+            <div class="cache-row-info">
+              <div class="cache-row-title-line">
+                <span class="cache-row-title">Tectonic engine cache</span>
+                <span
+                  class="cache-meta"
+                  title={compileCacheInfo?.tectonicCache.path ?? undefined}
+                >
+                  {#if isLoadingCacheInfo && !compileCacheInfo}
+                    ...
+                  {:else}
+                    {formatBytes(compileCacheInfo?.tectonicCache.bytes ?? 0)} · {formatFileCount(compileCacheInfo?.tectonicCache.fileCount ?? 0)}
+                  {/if}
+                </span>
+              </div>
+              <p class="field-hint">
+                Cached LaTeX formats &amp; packages (re-downloaded if needed on next compile)
+              </p>
+            </div>
+            <button
+              type="button"
+              class="btn btn-secondary cache-clear-btn"
+              disabled={!compileCacheInfo?.tectonicCache.exists ||
+                compileCacheInfo.tectonicCache.bytes === 0 ||
+                clearingCacheScope !== null}
+              onclick={() => onClearCompileCache?.("tectonic")}
+            >
+              {#if clearingCacheScope === "tectonic" || clearingCacheScope === "all"}
+                <LoaderCircle size={12} class="spin-icon" aria-hidden="true" />
+              {:else}
+                <Trash2 size={12} aria-hidden="true" />
+              {/if}
+              <span>Clear</span>
+            </button>
+          </div>
+
+          {#if cacheNotice}
+            <div class="status-banner status-compact" role="status" aria-live="polite">
+              <Info size={14} class="status-icon-info" aria-hidden="true" />
+              <p class="status-primary">{cacheNotice}</p>
+            </div>
+          {/if}
+        </div>
       </div>
     </section>
 
@@ -1050,6 +1183,10 @@
               <span><kbd>{modKey}B</kbd> Sidebar</span>
               <span aria-hidden="true">·</span>
               <span><kbd>{isMac ? "⌘⇧A" : "Ctrl+Shift+A"}</kbd> AI Sidebar</span>
+              <span aria-hidden="true">·</span>
+              <span><kbd>{isMac ? "⌘⇧J" : "Ctrl+Shift+J"}</kbd> Sync to PDF</span>
+              <span aria-hidden="true">·</span>
+              <span><kbd>Double-click PDF</kbd> Jump to source</span>
               <span aria-hidden="true">·</span>
               <span><kbd>{modKey},</kbd> Settings</span>
             </dd>
@@ -2012,5 +2149,108 @@
     to {
       transform: rotate(360deg);
     }
+  }
+
+  .cache-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .cache-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .cache-header-left {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-inline-size: 0;
+  }
+
+  .cache-total-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-muted);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cache-refresh-btn,
+  .cache-clear-btn {
+    min-block-size: 26px;
+    padding: 3px 9px;
+    font-size: 11px;
+    gap: 5px;
+    flex-shrink: 0;
+  }
+
+  .cache-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 11px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-elevated);
+  }
+
+  .cache-row-info {
+    min-inline-size: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .cache-row-title-line {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .cache-row-title {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .cache-row-title code,
+  .cache-row-info .field-hint code {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .cache-meta {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary);
+  }
+
+  @media (hover: hover) {
+    .cache-clear-btn:not(:disabled):hover {
+      border-color: var(--danger);
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+  }
+
+  :global(.status-icon-info) {
+    color: var(--accent);
+    flex-shrink: 0;
+    margin-top: 2px;
   }
 </style>

@@ -1,6 +1,7 @@
 pub mod ai_agent;
 pub mod compiler;
 pub mod mcp;
+pub mod synctex;
 pub mod workspace;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -27,6 +28,10 @@ pub fn run() {
             workspace::export_pdf,
             compiler::detect_compilers,
             compiler::compile_latex,
+            compiler::get_compile_cache_info,
+            compiler::clear_compile_cache,
+            synctex::synctex_forward,
+            synctex::synctex_inverse,
             mcp::mcp_list_tools,
             mcp::mcp_jsonrpc,
             ai_agent::ai_get_env_status,

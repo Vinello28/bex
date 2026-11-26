@@ -157,6 +157,50 @@ export interface CompileResponse {
   diagnostics: LatexDiagnostic[];
   durationMs: number;
   engineUsed: string;
+  synctexAvailable?: boolean;
+}
+
+export interface SyncTexRect {
+  page: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface SyncTexForwardRequest {
+  rootDir: string;
+  entryFile: string;
+  filePath: string;
+  line: number;
+  column?: number | null;
+}
+
+export interface SyncTexInverseRequest {
+  rootDir: string;
+  entryFile: string;
+  page: number;
+  x: number;
+  y: number;
+}
+
+export interface SyncTexLocation {
+  file: string;
+  line: number;
+  column?: number | null;
+}
+
+export interface CacheBucketInfo {
+  path?: string | null;
+  bytes: number;
+  fileCount: number;
+  exists: boolean;
+}
+
+export interface CompileCacheInfo {
+  projectCache: CacheBucketInfo;
+  tectonicCache: CacheBucketInfo;
+  totalBytes: number;
 }
 
 export interface AppUpdateInfo {

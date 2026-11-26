@@ -15,6 +15,7 @@
     AiSettings,
     AppUpdateInfo,
     AppView,
+    CompileCacheInfo,
     CompilerInfo,
     EditorMutation,
     FileNode,
@@ -23,6 +24,7 @@
     RecentFile,
     RecentProject,
     SettingsSectionId,
+    SyncTexRect,
     ThemeMode,
     UpdateProgress,
     UpdateStatus,
@@ -41,6 +43,7 @@
     aiListModels,
     aiSendMessage,
     checkForAppUpdate,
+    clearCompileCache,
     compileLatex,
     createFile,
     createNewProject,
@@ -49,6 +52,7 @@
     downloadAndInstallAppUpdate,
     exportPdf,
     FALLBACK_APP_VERSION,
+    getCompileCacheInfo,
     getCurrentAppVersion,
     initDefaultWorkspace,
     listWorkspaceFiles,
@@ -61,6 +65,8 @@
     relaunchApp,
     renamePath,
     saveTextFile,
+    synctexForward,
+    synctexInverse,
   } from "./lib/api";
 
   const THEME_STORAGE_KEY = "bex-theme";
@@ -223,9 +229,12 @@
   let showLogs = $state<boolean>(false);
   let statusNotice = $state<string | null>(null);
 
-  // Jump-to-line signal for CodeMirror
+  // Jump-to-line signal for CodeMirror & SyncTeX state
   let jumpSeq = 0;
   let jumpToLine = $state<{ line: number; seq: number } | null>(null);
+  let synctexAvailable = $state<boolean>(false);
+  let synctexHighlightSeq = 0;
+  let synctexHighlight = $state<{ rects: SyncTexRect[]; seq: number } | null>(null);
 
   // Layout & Resizing
   let sidebarOpen = $state<boolean>(true);
@@ -281,6 +290,11 @@
   let updateError = $state<string | null>(null);
   let updateCheckPromise: Promise<void> | null = null;
   let updateCheckSilent = true;
+  let compileCacheInfo = $state<CompileCacheInfo | null>(null);
+  let isLoadingCacheInfo = $state<boolean>(false);
+  let clearingCacheScope = $state<"project" | "tectonic" | "all" | null>(null);
+  let cacheNotice = $state<string | null>(null);
+  let cacheInfoRequestSeq = 0;
 
   // Persist compiler & AI preferences to localStorage
   $effect(() => {
@@ -447,7 +461,64 @@
 
   function handleOpenSettings(section?: SettingsSectionId) {
     settingsSection = section ?? null;
+    cacheNotice = null;
     settingsOpen = true;
+    void refreshCompileCacheInfo();
+  }
+
+  async function refreshCompileCacheInfo() {
+    const reqSeq = ++cacheInfoRequestSeq;
+    isLoadingCacheInfo = true;
+    try {
+      const info = await getCompileCacheInfo(workspace?.rootPath ?? null);
+      if (reqSeq === cacheInfoRequestSeq) {
+        compileCacheInfo = info;
+      }
+    } catch (err) {
+      if (reqSeq === cacheInfoRequestSeq) {
+        cacheNotice = `Could not inspect cache: ${formatError(err)}`;
+      }
+    } finally {
+      if (reqSeq === cacheInfoRequestSeq) {
+        isLoadingCacheInfo = false;
+      }
+    }
+  }
+
+  async function handleClearCompileCache(
+    scope: "project" | "tectonic" | "all"
+  ) {
+    if (clearingCacheScope !== null) return;
+    clearingCacheScope = scope;
+    cacheNotice = null;
+    const reqSeq = ++cacheInfoRequestSeq;
+
+    try {
+      const info = await clearCompileCache(workspace?.rootPath ?? null, scope);
+      if (reqSeq === cacheInfoRequestSeq) {
+        compileCacheInfo = info;
+      }
+
+      if (scope === "project" || scope === "all") {
+        synctexAvailable = false;
+        synctexHighlight = null;
+        pdfPath = null;
+      }
+
+      if (scope === "project") {
+        cacheNotice =
+          "Cleared project build cache (.bex-build). Recompile to refresh PDF and SyncTeX.";
+      } else if (scope === "tectonic") {
+        cacheNotice =
+          "Cleared Tectonic engine cache. Formats and packages will re-download on next compile if needed.";
+      } else {
+        cacheNotice = "Cleared project and Tectonic compilation caches.";
+      }
+    } catch (err) {
+      cacheNotice = `Failed to clear cache: ${formatError(err)}`;
+    } finally {
+      clearingCacheScope = null;
+    }
   }
 
   async function handleDownloadAndInstall() {
@@ -513,6 +584,10 @@
     diagnostics = [];
     logOutput = "";
     statusNotice = null;
+    synctexAvailable = false;
+    synctexHighlight = null;
+    cacheNotice = null;
+    compileCacheInfo = null;
 
     if (prevRoot && prevRoot !== ws.rootPath) {
       aiMessages = [];
@@ -663,6 +738,7 @@
     logOutput: string;
     diagnostics: LatexDiagnostic[];
     durationMs: number;
+    synctexAvailable?: boolean;
   }, fallbackMs?: number) {
     compileSuccess = res.success;
     lastCompileMs =
@@ -671,11 +747,15 @@
         : (fallbackMs ?? null);
     diagnostics = res.diagnostics ?? [];
     logOutput = res.logOutput ?? "";
+    synctexAvailable = Boolean(res.synctexAvailable);
     if (res.pdfPath) {
       pdfPath = res.pdfPath;
     }
     if (res.pdfBase64) {
       pdfBase64 = res.pdfBase64;
+    }
+    if (settingsOpen) {
+      void refreshCompileCacheInfo();
     }
   }
 
@@ -831,6 +911,60 @@
       }
     }
     jumpToLine = { line, seq: ++jumpSeq };
+  }
+
+  async function handleSyncToPdf(line: number, column: number) {
+    if (!workspace || !entryFile || !activeFilePath) return;
+    if (!synctexAvailable) {
+      reportNotice("SyncTeX data is not available yet. Compile the document first.");
+      return;
+    }
+
+    try {
+      const rects = await synctexForward({
+        rootDir: workspace.rootPath,
+        entryFile,
+        filePath: activeFilePath,
+        line: Math.max(1, Math.round(line)),
+        column: column > 0 ? Math.round(column) : null,
+      });
+
+      if (rects.length === 0) {
+        reportNotice(
+          `No SyncTeX PDF match found for ${basename(activeFilePath)}:${line}.`
+        );
+        return;
+      }
+
+      statusNotice = null;
+      synctexHighlight = { rects, seq: ++synctexHighlightSeq };
+    } catch (err) {
+      reportNotice(`SyncTeX forward search failed: ${formatError(err)}`);
+    }
+  }
+
+  async function handleSyncTexInverse(page: number, x: number, y: number) {
+    if (!workspace || !entryFile || !synctexAvailable) return;
+
+    try {
+      const loc = await synctexInverse({
+        rootDir: workspace.rootPath,
+        entryFile,
+        page,
+        x,
+        y,
+      });
+
+      if (!loc) {
+        reportNotice(`No SyncTeX source location found on PDF page ${page}.`);
+        return;
+      }
+
+      statusNotice = null;
+      await handleJumpToLine(loc.line, loc.file);
+    } catch (err) {
+      reportNotice(`SyncTeX inverse search failed: ${formatError(err)}`);
+    }
   }
 
   function resolveWorkspaceFilePath(fileHint: string): string | null {
@@ -1498,8 +1632,10 @@
             {diagnostics}
             {jumpToLine}
             {theme}
+            {synctexAvailable}
             onChange={handleEditorChange}
             onSaveAndCompile={handleSaveCurrentFile}
+            onSyncToPdf={handleSyncToPdf}
           />
         </section>
 
@@ -1527,8 +1663,11 @@
             {diagnostics}
             {logOutput}
             {showLogs}
+            {synctexAvailable}
+            {synctexHighlight}
             onToggleLogs={() => (showLogs = !showLogs)}
             onJumpToLine={handleJumpToLine}
+            onSyncTexInverse={handleSyncTexInverse}
             onExportPdf={handleExportPdf}
             onRecompile={runCompile}
           />
@@ -1625,6 +1764,12 @@
     onDownloadAndInstall={() => void handleDownloadAndInstall()}
     onRelaunch={() => void handleRelaunch()}
     onClose={handleCloseSettings}
+    {compileCacheInfo}
+    {isLoadingCacheInfo}
+    {clearingCacheScope}
+    {cacheNotice}
+    onRefreshCacheInfo={() => void refreshCompileCacheInfo()}
+    onClearCompileCache={(scope) => void handleClearCompileCache(scope)}
   />
 </div>
 

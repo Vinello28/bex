@@ -208,6 +208,7 @@ name = "bex-latex-studio"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "flate2",
  "regex",
  "reqwest 0.12.28",
  "serde",
@@ -218,6 +219,7 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-updater",
  "tectonic",
+ "tectonic_bridge_core",
  "tokio",
 ]
 

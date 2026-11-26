@@ -9,6 +9,7 @@ use std::process::Stdio;
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 use tectonic::status::{MessageKind, StatusBackend};
+use tectonic_bridge_core::{SecuritySettings, SecurityStance};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -48,6 +49,24 @@ pub struct CompileResponse {
     pub diagnostics: Vec<LatexDiagnostic>,
     pub duration_ms: u64,
     pub engine_used: String,
+    pub synctex_available: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CacheBucketInfo {
+    pub path: Option<String>,
+    pub bytes: u64,
+    pub file_count: u64,
+    pub exists: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompileCacheInfo {
+    pub project_cache: CacheBucketInfo,
+    pub tectonic_cache: CacheBucketInfo,
+    pub total_bytes: u64,
 }
 
 struct EngineSpec {
@@ -474,7 +493,19 @@ async fn compile_with_embedded_tectonic(
         let pdf_file = build_dir.join(format!("{entry_stem}.pdf"));
         let log_file = build_dir.join(format!("{entry_stem}.log"));
 
-        let mut builder = tectonic::driver::ProcessingSessionBuilder::default();
+        let security = SecuritySettings::new(SecurityStance::MaybeAllowInsecures);
+        let mut builder = tectonic::driver::ProcessingSessionBuilder::new_with_security(security);
+        let mut unstables = tectonic::unstable_opts::UnstableOptions::default();
+        unstables.extra_search_paths.push(build_dir.clone());
+        if let Some(rel_parent) = Path::new(&entry_rel).parent() {
+            if !rel_parent.as_os_str().is_empty() {
+                let nested_build = build_dir.join(rel_parent);
+                if nested_build != build_dir {
+                    unstables.extra_search_paths.push(nested_build);
+                }
+            }
+        }
+
         builder
             .bundle(bundle)
             .format_cache_path(format_cache_path)
@@ -485,10 +516,12 @@ async fn compile_with_embedded_tectonic(
             .output_dir(&build_dir)
             .output_format(tectonic::driver::OutputFormat::Pdf)
             .keep_logs(true)
-            .keep_intermediates(false)
+            .keep_intermediates(true)
             .print_stdout(false)
             .synctex(true)
-            .build_date_from_env(false);
+            .build_date_from_env(false)
+            .unstables(unstables)
+            .shell_escape_disabled();
 
         let mut sess = builder
             .create(&mut status)
@@ -841,19 +874,30 @@ pub async fn compile_latex(request: CompileRequest) -> Result<CompileResponse, S
         )
     })?;
 
-    if let Some(rel_parent) = Path::new(&entry_rel).parent() {
-        if !rel_parent.as_os_str().is_empty() {
-            let nested_build = build_dir.join(rel_parent);
-            let _ = tokio::fs::create_dir_all(&nested_build).await;
-        }
+    let rel_parent = Path::new(&entry_rel)
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(Path::to_path_buf);
+
+    if let Some(ref rp) = rel_parent {
+        let nested_build = build_dir.join(rp);
+        let _ = tokio::fs::create_dir_all(&nested_build).await;
     }
 
     let pdf_file = build_dir.join(format!("{entry_stem}.pdf"));
     let log_file = build_dir.join(format!("{entry_stem}.log"));
 
-    // Clear stale artifacts so a failed compilation never returns an old PDF or old log.
-    let _ = tokio::fs::remove_file(&pdf_file).await;
-    let _ = tokio::fs::remove_file(&log_file).await;
+    // Clear ONLY ephemeral per-run output files so a failed compilation never returns stale
+    // PDF/log/SyncTeX/XDV while preserving incremental intermediates (.aux, .toc, .bbl, .out, etc.).
+    let stale_exts = ["pdf", "log", "synctex.gz", "synctex", "xdv"];
+    for ext in stale_exts {
+        let _ = tokio::fs::remove_file(build_dir.join(format!("{entry_stem}.{ext}"))).await;
+        if let Some(ref rp) = rel_parent {
+            let _ = tokio::fs::remove_file(build_dir.join(rp).join(format!("{entry_stem}.{ext}")))
+                .await;
+        }
+    }
+    crate::synctex::invalidate_synctex_cache();
 
     let (engine_used, success, pdf_base64, pdf_path, log_output, mut diagnostics) =
         match resolved_engine {
@@ -888,6 +932,7 @@ pub async fn compile_latex(request: CompileRequest) -> Result<CompileResponse, S
                 configure_tokio_command(&mut cmd);
                 cmd.current_dir(&root_canon);
                 cmd.args([
+                    "-synctex=1",
                     "-interaction=nonstopmode",
                     "-file-line-error",
                     "-output-directory=.bex-build",
@@ -950,6 +995,16 @@ pub async fn compile_latex(request: CompileRequest) -> Result<CompileResponse, S
             }
         };
 
+    // Keep `.bex-build` compact by removing intermediate `.xdv` files after compilation.
+    let _ = tokio::fs::remove_file(build_dir.join(format!("{entry_stem}.xdv"))).await;
+    if let Some(ref rp) = rel_parent {
+        let _ = tokio::fs::remove_file(build_dir.join(rp).join(format!("{entry_stem}.xdv"))).await;
+    }
+
+    crate::synctex::invalidate_synctex_cache();
+
+    let synctex_available = success && has_synctex_artifact(&build_dir, &entry_stem, rel_parent.as_deref());
+
     if !success && !diagnostics.iter().any(|d| d.severity == "error") {
         let fallback_msg = log_output
             .lines()
@@ -975,7 +1030,246 @@ pub async fn compile_latex(request: CompileRequest) -> Result<CompileResponse, S
         diagnostics,
         duration_ms,
         engine_used,
+        synctex_available,
     })
+}
+
+fn has_synctex_artifact(build_dir: &Path, entry_stem: &str, rel_parent: Option<&Path>) -> bool {
+    let gz = build_dir.join(format!("{entry_stem}.synctex.gz"));
+    let plain = build_dir.join(format!("{entry_stem}.synctex"));
+    if gz.is_file() || plain.is_file() {
+        return true;
+    }
+    if let Some(rp) = rel_parent {
+        let nested = build_dir.join(rp);
+        if nested.join(format!("{entry_stem}.synctex.gz")).is_file()
+            || nested.join(format!("{entry_stem}.synctex")).is_file()
+        {
+            return true;
+        }
+    }
+    false
+}
+
+fn compute_dir_stats(dir: &Path) -> (u64, u64, bool) {
+    let Ok(meta) = std::fs::symlink_metadata(dir) else {
+        return (0, 0, false);
+    };
+    if !meta.is_dir() {
+        return (0, 0, false);
+    }
+
+    let mut total_bytes: u64 = 0;
+    let mut file_count: u64 = 0;
+    let mut stack = vec![dir.to_path_buf()];
+
+    while let Some(current) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&current) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(ft) = entry.file_type() else {
+                continue;
+            };
+            if ft.is_symlink() {
+                continue;
+            }
+            if ft.is_dir() {
+                stack.push(entry.path());
+            } else if ft.is_file() {
+                if let Ok(m) = entry.metadata() {
+                    total_bytes = total_bytes.saturating_add(m.len());
+                    file_count = file_count.saturating_add(1);
+                }
+            }
+        }
+    }
+
+    (total_bytes, file_count, true)
+}
+
+fn resolve_tectonic_cache_dir() -> Result<PathBuf, String> {
+    let config = tectonic::config::PersistentConfig::open(false)
+        .map_err(|e| format!("Failed to open Tectonic configuration: {e:#}"))?;
+    let format_cache = config
+        .format_cache_path()
+        .map_err(|e| format!("Failed to resolve Tectonic format cache path: {e:#}"))?;
+    let parent = format_cache
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| "Failed to resolve Tectonic cache root directory.".to_string())?;
+    Ok(parent)
+}
+
+fn validate_safe_tectonic_cache_dir(dir: &Path) -> Result<(), String> {
+    if dir.as_os_str().is_empty() || dir.parent().is_none() || dir.components().count() < 3 {
+        return Err(format!(
+            "Refusing to clear unsafe Tectonic cache directory '{}'.",
+            dir.display()
+        ));
+    }
+    let Some(name) = dir.file_name().and_then(|n| n.to_str()) else {
+        return Err(format!(
+            "Refusing to clear Tectonic cache directory '{}' without a directory name.",
+            dir.display()
+        ));
+    };
+    if name.is_empty() || name == "." || name == ".." {
+        return Err(format!(
+            "Refusing to clear invalid Tectonic cache directory '{}'.",
+            dir.display()
+        ));
+    }
+
+    let check_candidate = canonicalize_clean(dir).unwrap_or_else(|_| dir.to_path_buf());
+    for env_key in ["HOME", "USERPROFILE", "XDG_CACHE_HOME", "LOCALAPPDATA"] {
+        if let Some(val) = std::env::var_os(env_key) {
+            if !val.is_empty() {
+                let p = PathBuf::from(val);
+                let p_canon = canonicalize_clean(&p).unwrap_or(p);
+                if check_candidate == p_canon
+                    || check_candidate == p_canon.join("Library")
+                    || check_candidate == p_canon.join("Library").join("Caches")
+                    || check_candidate == p_canon.join(".cache")
+                {
+                    return Err(format!(
+                        "Refusing to clear protected directory '{}'.",
+                        dir.display()
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn collect_cache_info_sync(root_dir: Option<&str>) -> Result<CompileCacheInfo, String> {
+    let project_cache = match root_dir.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(raw) => {
+            let root_canon = canonicalize_clean(Path::new(raw))?;
+            if !root_canon.is_dir() {
+                return Err(format!(
+                    "Workspace root '{}' is not a directory.",
+                    root_canon.display()
+                ));
+            }
+            let build_dir = root_canon.join(".bex-build");
+            let (bytes, file_count, exists) = compute_dir_stats(&build_dir);
+            CacheBucketInfo {
+                path: Some(path_to_clean_string(&build_dir)),
+                bytes,
+                file_count,
+                exists,
+            }
+        }
+        None => CacheBucketInfo {
+            path: None,
+            bytes: 0,
+            file_count: 0,
+            exists: false,
+        },
+    };
+
+    let tectonic_dir = resolve_tectonic_cache_dir()?;
+    let (tec_bytes, tec_files, tec_exists) = compute_dir_stats(&tectonic_dir);
+    let tectonic_cache = CacheBucketInfo {
+        path: Some(path_to_clean_string(&tectonic_dir)),
+        bytes: tec_bytes,
+        file_count: tec_files,
+        exists: tec_exists,
+    };
+
+    let total_bytes = project_cache.bytes.saturating_add(tectonic_cache.bytes);
+    Ok(CompileCacheInfo {
+        project_cache,
+        tectonic_cache,
+        total_bytes,
+    })
+}
+
+#[tauri::command]
+pub async fn get_compile_cache_info(root_dir: Option<String>) -> Result<CompileCacheInfo, String> {
+    tokio::task::spawn_blocking(move || collect_cache_info_sync(root_dir.as_deref()))
+        .await
+        .map_err(|e| format!("Failed to inspect compile cache: {e}"))?
+}
+
+#[tauri::command]
+pub async fn clear_compile_cache(
+    root_dir: Option<String>,
+    scope: String,
+) -> Result<CompileCacheInfo, String> {
+    tokio::task::spawn_blocking(move || {
+        let normalized_scope = scope.trim().to_ascii_lowercase();
+        let (clear_project, clear_tectonic) = match normalized_scope.as_str() {
+            "project" => (true, false),
+            "tectonic" => (false, true),
+            "all" => (true, true),
+            _ => {
+                return Err(format!(
+                    "Invalid cache scope '{}'. Expected 'project', 'tectonic', or 'all'.",
+                    scope
+                ))
+            }
+        };
+
+        if clear_project {
+            let trimmed_root = root_dir.as_deref().map(str::trim).filter(|s| !s.is_empty());
+            if let Some(raw) = trimmed_root {
+                let root_canon = canonicalize_clean(Path::new(raw))?;
+                if !root_canon.is_dir() {
+                    return Err(format!(
+                        "Workspace root '{}' is not a directory.",
+                        root_canon.display()
+                    ));
+                }
+                let build_dir = root_canon.join(".bex-build");
+                if build_dir.file_name() == Some(std::ffi::OsStr::new(".bex-build"))
+                    && build_dir.exists()
+                {
+                    std::fs::remove_dir_all(&build_dir).map_err(|e| {
+                        format!(
+                            "Failed to remove project build cache '{}': {}",
+                            build_dir.display(),
+                            e
+                        )
+                    })?;
+                }
+                crate::synctex::invalidate_synctex_cache();
+            } else if normalized_scope == "project" {
+                return Err("Workspace root directory is required to clear project cache.".to_string());
+            }
+        }
+
+        if clear_tectonic {
+            let _guard = EMBEDDED_TECTONIC_LOCK
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let tectonic_dir = resolve_tectonic_cache_dir()?;
+            validate_safe_tectonic_cache_dir(&tectonic_dir)?;
+            if tectonic_dir.exists() {
+                std::fs::remove_dir_all(&tectonic_dir).map_err(|e| {
+                    format!(
+                        "Failed to clear Tectonic cache '{}': {}",
+                        tectonic_dir.display(),
+                        e
+                    )
+                })?;
+                std::fs::create_dir_all(&tectonic_dir).map_err(|e| {
+                    format!(
+                        "Failed to recreate Tectonic cache directory '{}': {}",
+                        tectonic_dir.display(),
+                        e
+                    )
+                })?;
+            }
+        }
+
+        collect_cache_info_sync(root_dir.as_deref())
+    })
+    .await
+    .map_err(|e| format!("Failed to clear compile cache: {e}"))?
 }
 
 #[cfg(test)]
@@ -1112,6 +1406,7 @@ warning: deprecated macro used on input line 50
             resp.log_output
         );
         assert_eq!(resp.engine_used, "tectonic");
+        assert!(resp.synctex_available);
         let b64 = resp.pdf_base64.expect("pdf_base64 present");
         let pdf_bytes = BASE64_STANDARD.decode(&b64).expect("valid base64");
         assert!(
@@ -1142,6 +1437,7 @@ warning: deprecated macro used on input line 50
         .expect("compile_latex response");
 
         assert!(!resp.success);
+        assert!(!resp.synctex_available);
         assert_eq!(resp.engine_used, "tectonic");
         assert!(resp.pdf_base64.is_none());
         assert!(
@@ -1152,6 +1448,101 @@ warning: deprecated macro used on input line 50
             resp.diagnostics,
             resp.log_output
         );
+    }
+
+    #[tokio::test]
+    async fn incremental_compile_preserves_aux_removes_xdv_and_reduces_passes() {
+        let dir = TempDirGuard::new("tectonic-incremental");
+        seed_sample_project(&dir.path).expect("seed sample project");
+
+        let count_tex_passes = |log: &str| -> usize {
+            log.lines()
+                .filter(|line| {
+                    let t = line.trim();
+                    t.starts_with("note: Running TeX ") || t.starts_with("note: Rerunning TeX ")
+                })
+                .count()
+        };
+
+        let first = compile_latex(CompileRequest {
+            root_dir: dir.path.to_string_lossy().into_owned(),
+            entry_file: "main.tex".to_string(),
+            engine: "tectonic".to_string(),
+        })
+        .await
+        .expect("first compile");
+
+        assert!(first.success, "first compile failed:\n{}", first.log_output);
+        assert!(first.synctex_available);
+        let build_dir = dir.path.join(".bex-build");
+        assert!(build_dir.join("main.aux").is_file(), "expected .aux to be preserved");
+        assert!(!build_dir.join("main.xdv").exists(), "expected .xdv to be removed");
+
+        let first_passes = count_tex_passes(&first.log_output);
+        assert!(
+            first_passes >= 3,
+            "expected >= 3 TeX passes on cold sample project compile, got {first_passes}\n{}",
+            first.log_output
+        );
+
+        let second = compile_latex(CompileRequest {
+            root_dir: dir.path.to_string_lossy().into_owned(),
+            entry_file: "main.tex".to_string(),
+            engine: "tectonic".to_string(),
+        })
+        .await
+        .expect("second compile");
+
+        assert!(second.success, "second compile failed:\n{}", second.log_output);
+        assert!(second.synctex_available);
+        assert!(build_dir.join("main.aux").is_file(), "expected .aux to stay preserved");
+        assert!(!build_dir.join("main.xdv").exists(), "expected .xdv to remain absent");
+
+        let second_passes = count_tex_passes(&second.log_output);
+        assert!(
+            second_passes < first_passes,
+            "expected incremental 2nd run to run fewer TeX passes ({second_passes} vs {first_passes})\nLog 2:\n{}",
+            second.log_output
+        );
+    }
+
+    #[tokio::test]
+    async fn inspects_and_clears_project_compile_cache() {
+        let dir = TempDirGuard::new("cache-info");
+        let build_dir = dir.path.join(".bex-build");
+        std::fs::create_dir_all(&build_dir).unwrap();
+        std::fs::write(build_dir.join("main.aux"), b"\\relax\n").unwrap();
+        std::fs::write(build_dir.join("main.pdf"), b"%PDF-1.4\n12345").unwrap();
+
+        let root_str = dir.path.to_string_lossy().into_owned();
+        let before = get_compile_cache_info(Some(root_str.clone()))
+            .await
+            .expect("get_compile_cache_info");
+        assert!(before.project_cache.exists);
+        assert_eq!(before.project_cache.file_count, 2);
+        assert_eq!(before.project_cache.bytes, 7 + 14);
+        assert_eq!(
+            before.total_bytes,
+            before.project_cache.bytes + before.tectonic_cache.bytes
+        );
+
+        let after = clear_compile_cache(Some(root_str.clone()), "project".to_string())
+            .await
+            .expect("clear_compile_cache project");
+        assert!(!after.project_cache.exists);
+        assert_eq!(after.project_cache.file_count, 0);
+        assert_eq!(after.project_cache.bytes, 0);
+        assert!(!build_dir.exists());
+
+        assert!(clear_compile_cache(Some(root_str), "invalid".to_string())
+            .await
+            .is_err());
+
+        let no_proj = get_compile_cache_info(None)
+            .await
+            .expect("get_compile_cache_info without root");
+        assert!(!no_proj.project_cache.exists);
+        assert!(no_proj.project_cache.path.is_none());
     }
 
     #[test]

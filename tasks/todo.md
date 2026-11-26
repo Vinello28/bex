@@ -184,6 +184,43 @@
   - `npm run build`: `vite build` succeeded (`dist/index.html`, `dist/assets/index-DqKb8LzT.css`, `dist/assets/index-5c0Tux5l.js`, `dist/assets/pdf.worker.min-iDqQPrd3.mjs`).
   - `cd src-tauri && cargo check --all-targets && cargo test -- --nocapture`: exited `0`, **16 passed; 0 failed** in `bex_latex_studio_lib`.
 
+---
+
+## Step 9: Bidirectional SyncTeX, Compilation Optimizations & Cache Management (`/swarm`)
+- [x] **Setup & Swarm Plan**:
+  - [x] Initialize `/swarm` (`rust-backend`, `pdf-synctex-ui`, `settings-app-ui`) and write Swarm Overview `plan.json`
+- [x] **Worker 1 (`rust-backend`)**:
+  - [x] Enable `[profile.dev.package."*"] opt-level = 3` and add `flate2` + `tectonic_bridge_core` in `src-tauri/Cargo.toml`
+  - [x] Implement `.synctex.gz`/`.synctex` parser + forward/inverse search (`synctex_forward`, `synctex_inverse`) in `src-tauri/src/synctex.rs` with unit + live Tectonic integration tests
+  - [x] Implement incremental intermediate caching in `.bex-build` for Tectonic (`keep_intermediates(true)` + `extra_search_paths`, `shell_escape_disabled()`), `.xdv` cleanup, `-synctex=1` for CLI engines, `synctexAvailable`, `get_compile_cache_info`, and `clear_compile_cache` in `src-tauri/src/compiler.rs`
+  - [x] Register commands in `src-tauri/src/lib.rs` and pass `cargo test`
+- [x] **Worker 2 (`pdf-synctex-ui`)**:
+  - [x] Implement viewport-prioritized lazy PDF rendering (`IntersectionObserver`, off-screen `content-visibility: auto`, max 2 concurrent renders) in `src/lib/components/PdfPreview.svelte`
+  - [x] Implement SyncTeX forward highlight overlays (amber, compositor-only animations with `prefers-reduced-motion`) & inverse search (double-click / `Cmd/Ctrl+Click`) in `src/lib/components/PdfPreview.svelte`
+  - [x] Add Sync to PDF button (`Cmd/Ctrl+Shift+J`) and inverse-jump line cue in `src/lib/components/EditorPane.svelte`
+- [x] **Worker 3 (`settings-app-ui`)**:
+  - [x] Extend `src/lib/types.ts` and `src/lib/api.ts` with SyncTeX and compilation cache IPC contracts + browser preview mocks
+  - [x] Add Compilation Cache section (project `.bex-build` & Tectonic cache size/counts + Clear buttons) and SyncTeX shortcut entries in `src/lib/components/SettingsDialog.svelte`
+  - [x] Wire bidirectional SyncTeX and cache management state in `src/App.svelte`
+- [x] **Integration & Verification (`verifier`)**:
+  - [x] Land worker edits into main workspace and run `cargo test`, `npm run check`, `npm run build`, and code/theme/guidance audits
+  - [x] Document results in `tasks/todo.md`
+
+### Step 9 Verification Summary
+- **Backend (`src-tauri/Cargo.toml`, `src-tauri/src/synctex.rs`, `src-tauri/src/compiler.rs`, `src-tauri/src/lib.rs`)**:
+  - Added `[profile.dev.package."*"] opt-level = 3` so embedded Tectonic dependencies compile optimized in `tauri dev`.
+  - Enabled incremental Tectonic caching by preserving `.aux`/`.toc`/`.bbl`/`.out` intermediates in `.bex-build` (`keep_intermediates(true)` + `extra_search_paths` with `SecurityStance::MaybeAllowInsecures` and explicit `.shell_escape_disabled()`), removing `.xdv` post-compile, and passing `-synctex=1` to external CLI engines.
+  - Added `.synctex.gz`/`.synctex` parser (`synctex_forward`, `synctex_inverse`) with `SYNCTEX_CACHE` + `invalidate_synctex_cache()`, plus `get_compile_cache_info` and `clear_compile_cache` (`project` / `tectonic` / `all`).
+- **Frontend (`src/lib/types.ts`, `src/lib/api.ts`, `src/lib/components/PdfPreview.svelte`, `src/lib/components/EditorPane.svelte`, `src/lib/components/SettingsDialog.svelte`, `src/App.svelte`)**:
+  - Switched `PdfPreview.svelte` to viewport-prioritized lazy page rendering (`IntersectionObserver`, `MAX_CONCURRENT_RENDERS = 2`, `.offscreen-page` `content-visibility: auto` + `contain-intrinsic-size`), added forward amber SyncTeX highlight overlays and double-click / `Cmd/Ctrl+Click` inverse search.
+  - Added `Sync to PDF` button and `Mod-Shift-j` shortcut with amber line flash in `EditorPane.svelte`, and **Compilation Cache** size/file-count display + **Clear** actions in `SettingsDialog.svelte`.
+- **Verified Checks (after final edits in main workspace)**:
+  - `cd src-tauri && cargo check --all-targets && cargo test -- --nocapture`: exited `0`, **21 passed; 0 failed** in `bex_latex_studio_lib`.
+  - `npm run check`: `svelte-check` reported **0 errors and 0 warnings**, `tsc --noEmit` exited `0`.
+  - `npm run build`: `vite build` succeeded (`4724 modules transformed`, `dist/index.html`, `dist/assets/pdf.worker.min-iDqQPrd3.mjs`, `dist/assets/index-Cr_Un6wN.css`, `dist/assets/index-BuEWWMLc.js`).
+  - Palette, `modern-web-guidance` (`defer-rendering-heavy-content`, `motion`), and security audits: clean.
+
+
 
 
 

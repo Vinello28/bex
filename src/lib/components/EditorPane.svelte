@@ -1,7 +1,17 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Annotation, Compartment, EditorState, Prec, type Extension } from "@codemirror/state";
   import {
+    Annotation,
+    Compartment,
+    EditorState,
+    Prec,
+    StateEffect,
+    StateField,
+    type Extension,
+  } from "@codemirror/state";
+  import {
+    Decoration,
+    type DecorationSet,
     EditorView,
     crosshairCursor,
     drawSelection,
@@ -49,6 +59,7 @@
   import { tags } from "@lezer/highlight";
   import {
     Bold,
+    Crosshair,
     Heading,
     Image,
     Italic,
@@ -68,8 +79,10 @@
     diagnostics?: LatexDiagnostic[];
     jumpToLine?: { line: number; seq: number } | null;
     theme?: "light" | "dark" | "system";
+    synctexAvailable?: boolean;
     onChange: (newContent: string) => void;
     onSaveAndCompile: () => void;
+    onSyncToPdf?: (line: number, column: number) => void;
   }
 
   let {
@@ -80,8 +93,10 @@
     diagnostics = [],
     jumpToLine = null,
     theme = "system",
+    synctexAvailable = false,
     onChange,
     onSaveAndCompile,
+    onSyncToPdf,
   }: Props = $props();
 
   let editorHost: HTMLDivElement | undefined = $state();
@@ -94,10 +109,43 @@
   let lastSyncedContent = "";
   let lastFilePath: string | null = null;
   let lastJumpSeq = -1;
+  let flashClearTimer: ReturnType<typeof setTimeout> | null = null;
+  let flashParity = 0;
 
   const externalSyncAnnotation = Annotation.define<boolean>();
   const themeCompartment = new Compartment();
   const editableCompartment = new Compartment();
+
+  const setFlashLineEffect = StateEffect.define<{ pos: number; parity: number } | null>();
+  const flashLineDecoEven = Decoration.line({
+    attributes: { class: "cm-synctex-flash-line cm-synctex-flash-a" },
+  });
+  const flashLineDecoOdd = Decoration.line({
+    attributes: { class: "cm-synctex-flash-line cm-synctex-flash-b" },
+  });
+
+  const flashLineField = StateField.define<DecorationSet>({
+    create() {
+      return Decoration.none;
+    },
+    update(decorations, tr) {
+      let next = decorations.map(tr.changes);
+      for (const effect of tr.effects) {
+        if (effect.is(setFlashLineEffect)) {
+          if (effect.value === null) {
+            next = Decoration.none;
+          } else {
+            const safePos = Math.max(0, Math.min(effect.value.pos, tr.state.doc.length));
+            const line = tr.state.doc.lineAt(safePos);
+            const deco = effect.value.parity % 2 === 0 ? flashLineDecoEven : flashLineDecoOdd;
+            next = Decoration.set([deco.range(line.from)]);
+          }
+        }
+      }
+      return next;
+    },
+    provide: (f) => EditorView.decorations.from(f),
+  });
 
   const isDark = $derived(theme === "dark" || (theme === "system" && systemDark));
 
@@ -459,6 +507,7 @@
         latexLanguage,
         latexLanguage.data.of({ commentTokens: { line: "%" } }),
         EditorView.lineWrapping,
+        flashLineField,
         Prec.highest(
           keymap.of([
             {
@@ -466,6 +515,15 @@
               preventDefault: true,
               run: () => {
                 onSaveAndCompile();
+                return true;
+              },
+            },
+            {
+              key: "Mod-Shift-j",
+              preventDefault: true,
+              run: () => {
+                if (!filePath || !synctexAvailable) return false;
+                triggerSyncToPdf();
                 return true;
               },
             },
@@ -560,11 +618,29 @@
     view.focus();
   }
 
+  function triggerSyncToPdf(): void {
+    if (!filePath || !synctexAvailable) return;
+    if (view) {
+      const head = view.state.selection.main.head;
+      const line = view.state.doc.lineAt(head);
+      onSyncToPdf?.(line.number, head - line.from + 1);
+    } else {
+      onSyncToPdf?.(cursorLine, cursorCol);
+    }
+  }
+
   function handlePaneKeydown(event: KeyboardEvent): void {
     if (event.defaultPrevented) return;
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-      event.preventDefault();
-      onSaveAndCompile();
+    if ((event.metaKey || event.ctrlKey) && !event.altKey) {
+      const key = event.key.toLowerCase();
+      if (key === "s" && !event.shiftKey) {
+        event.preventDefault();
+        onSaveAndCompile();
+      } else if (key === "j" && event.shiftKey) {
+        if (!filePath || !synctexAvailable) return;
+        event.preventDefault();
+        triggerSyncToPdf();
+      }
     }
   }
 
@@ -589,6 +665,10 @@
 
     return () => {
       mq.removeEventListener("change", handleMediaChange);
+      if (flashClearTimer) {
+        clearTimeout(flashClearTimer);
+        flashClearTimer = null;
+      }
       view?.destroy();
       view = null;
     };
@@ -604,6 +684,10 @@
     const currentDoc = view.state.doc.toString();
 
     if (fileChanged) {
+      if (flashClearTimer) {
+        clearTimeout(flashClearTimer);
+        flashClearTimer = null;
+      }
       lastFilePath = nextPath;
       lastSyncedContent = nextContent;
       cursorLine = 1;
@@ -649,22 +733,41 @@
     applyDiagnosticsToView(view, currentDiagnostics);
   });
 
-  // Jump to line when requested from PDF diagnostics drawer
+  // Jump to line when requested from PDF diagnostics drawer or SyncTeX inverse search
   $effect(() => {
     const target = jumpToLine;
     if (!view || !target) return;
     if (target.seq === lastJumpSeq) return;
     lastJumpSeq = target.seq;
 
+    if (flashClearTimer) {
+      clearTimeout(flashClearTimer);
+      flashClearTimer = null;
+    }
+
     const doc = view.state.doc;
     const lineNum = Math.max(1, Math.min(target.line, doc.lines));
     const lineObj = doc.line(lineNum);
+    const parity = ++flashParity;
 
     view.dispatch({
       selection: { anchor: lineObj.from },
-      effects: EditorView.scrollIntoView(lineObj.from, { y: "center" }),
+      effects: [
+        EditorView.scrollIntoView(lineObj.from, { y: "center" }),
+        setFlashLineEffect.of({ pos: lineObj.from, parity }),
+      ],
     });
     view.focus();
+
+    const activeView = view;
+    flashClearTimer = setTimeout(() => {
+      flashClearTimer = null;
+      if (view === activeView) {
+        activeView.dispatch({
+          effects: setFlashLineEffect.of(null),
+        });
+      }
+    }, 1600);
   });
 </script>
 
@@ -776,6 +879,17 @@
       </button>
       <button
         type="button"
+        class="tool-btn sync-btn"
+        title="Jump to PDF (SyncTeX · Cmd/Ctrl+Shift+J)"
+        aria-label="Sync to PDF"
+        disabled={!filePath || !synctexAvailable}
+        onclick={triggerSyncToPdf}
+      >
+        <Crosshair size={14} aria-hidden="true" />
+        <span>Sync to PDF</span>
+      </button>
+      <button
+        type="button"
         class="tool-btn save-btn"
         title="Save & Compile (Cmd/Ctrl+S)"
         aria-label="Save and Compile"
@@ -836,13 +950,14 @@
     background: var(--bg-surface);
     border-bottom: 1px solid var(--border-subtle);
     flex-shrink: 0;
+    overflow-x: auto;
   }
 
   .breadcrumb {
     display: flex;
     align-items: center;
     gap: 6px;
-    min-inline-size: 0;
+    min-inline-size: 72px;
     flex: 1 1 auto;
     font-size: 12px;
     color: var(--text-secondary, #404040);
@@ -922,6 +1037,16 @@
     color: var(--accent, #b45309);
   }
 
+  .sync-btn {
+    padding: 0 7px;
+    white-space: nowrap;
+  }
+
+  .sync-btn:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--accent, #b45309) 12%, transparent);
+    color: var(--accent, #b45309);
+  }
+
   .tool-sep {
     width: 1px;
     height: 16px;
@@ -990,6 +1115,70 @@
   .codemirror-host :global(.cm-scroller) {
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar-thumb, #737373) var(--scrollbar-track, transparent);
+  }
+
+  .codemirror-host :global(.cm-line.cm-synctex-flash-line) {
+    position: relative;
+  }
+
+  .codemirror-host :global(.cm-line.cm-synctex-flash-line)::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: color-mix(in oklab, var(--accent, #b45309) 20%, transparent);
+    border-left: 3px solid var(--accent, #b45309);
+    border-radius: 2px;
+    opacity: 1;
+    will-change: opacity, transform;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .codemirror-host :global(.cm-line.cm-synctex-flash-a)::after {
+      animation: cm-synctex-flash-a 1.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    .codemirror-host :global(.cm-line.cm-synctex-flash-b)::after {
+      animation: cm-synctex-flash-b 1.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+  }
+
+  @keyframes cm-synctex-flash-a {
+    0% {
+      opacity: 0;
+      transform: scaleX(0.985);
+    }
+    14% {
+      opacity: 1;
+      transform: scaleX(1);
+    }
+    72% {
+      opacity: 0.85;
+      transform: scaleX(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scaleX(1);
+    }
+  }
+
+  @keyframes cm-synctex-flash-b {
+    0% {
+      opacity: 0;
+      transform: scaleX(0.985);
+    }
+    14% {
+      opacity: 1;
+      transform: scaleX(1);
+    }
+    72% {
+      opacity: 0.85;
+      transform: scaleX(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scaleX(1);
+    }
   }
 
   @supports not (scrollbar-color: auto) {
