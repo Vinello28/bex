@@ -241,6 +241,34 @@
   - Idempotency test: running `python3 scripts/bundle-macos-dylibs.py` a second time against the patched binary exited `0` with all 7 dylibs preserved.
   - Config validation: `YAML_OK` (`.github/workflows/release.yml`), `JSON_OK` (`src-tauri/tauri.conf.json`, `src-tauri/tauri.macos.conf.json`), `PY_OK` (`scripts/bundle-macos-dylibs.py`).
 
+---
+
+## Step 11: Resizable UI (`Cmd/Ctrl +/-/0`) & LaTeX Comment Shortcut (`Cmd/Ctrl+ù`) (`/swarm`)
+- [x] **Stage 1 (`ui-zoom` & `latex-comment` in parallel)**:
+  - [x] `ui-zoom`: Add `core:webview:allow-set-webview-zoom` capability (`src-tauri/capabilities/default.json`), zoom helpers & keyboard-layout-safe shortcut matcher (`src/lib/uiZoom.ts`), `setWebviewZoom` + comment-stripping browser preview (`src/lib/api.ts`), and browser-only startup zoom restore (`index.html`)
+  - [x] `latex-comment`: Add LaTeX comment helpers (`src/lib/latexComment.ts`), `Cmd/Ctrl+ù` / `Cmd/Ctrl+/` CodeMirror + toolbar integration (`src/lib/components/EditorPane.svelte`), and Tectonic comment-exclusion integration test (`src-tauri/src/compiler.rs`)
+- [x] **Stage 2 (`app-settings-ui`)**:
+  - [x] Wire global `Cmd/Ctrl +` / `-` / `0` UI scaling, transient zoom HUD, live region, and high-zoom layout guards (`src/App.svelte`)
+  - [x] Add Interface Scale controls and updated keyboard shortcuts section (`src/lib/components/SettingsDialog.svelte`)
+- [x] **Stage 3 (`verifier`)**:
+  - [x] Merge all worker branches cleanly and verify `npm run check`, `npm run build`, `cargo check --all-targets && cargo test -- --nocapture`, Node shortcut/CodeMirror behavioral tests, and palette/no-double-zoom audits
+
+### Step 11 Verification Summary
+- **Resizable UI (`src-tauri/capabilities/default.json`, `src/lib/uiZoom.ts`, `src/lib/api.ts`, `index.html`, `src/App.svelte`, `src/lib/components/SettingsDialog.svelte`)**:
+  - Enabled `"core:webview:allow-set-webview-zoom"` in `src-tauri/capabilities/default.json` and wired `getCurrentWebview().setZoom(scaleFactor)` in `setWebviewZoom` (`src/lib/api.ts`) for native whole-UI zoom in Tauri (`[0.7, 1.8]`, step `0.1`, persisted under `"bex-ui-zoom"`), with a browser-preview-only `document.documentElement.style.zoom` fallback guarded by `!isTauriRuntime()` / `!("__TAURI_INTERNALS__" in window)` so Tauri never double-zooms.
+  - Added layout-safe shortcut detection in `src/lib/uiZoom.ts` (`matchUiZoomShortcut`) supporting Italian (`+`/`-`), US (`=`/`+`/`-`), Numpad (`NumpadAdd`/`NumpadSubtract`/`Numpad0`), and `Cmd/Ctrl+0`, while safely ignoring AltGr (`ctrlKey && altKey`), IME composition, and false Italian `Minus`/`Equal`/`Shift+0` keys.
+  - Added global zoom shortcut handling, a transient `.zoom-hud` pill with `prefers-reduced-motion: reduce`, a 350ms-debounced `sr-only` polite live region, and responsive sidebar `max-inline-size` guards (`min(420px, 38vw)` / `min(560px, 45vw)`) in `src/App.svelte`, plus **Appearance → Interface Scale** controls (`Minus`/`Plus`/`RotateCcw`) and **About Bex → Shortcuts** entries in `src/lib/components/SettingsDialog.svelte`.
+- **LaTeX Comment Toggle (`src/lib/latexComment.ts`, `src/lib/components/EditorPane.svelte`, `src/lib/api.ts`, `src-tauri/src/compiler.rs`)**:
+  - Added `isCommentToggleShortcut`, `toggleLatexComment`, and `stripLatexComments` in `src/lib/latexComment.ts`, matching `Cmd/Ctrl+ù` (including `Ù` and NFD `u\u0300`, excluding `Shift+ù` and AltGr) and `Cmd/Ctrl+/` (including Italian `Shift+7`).
+  - Integrated a single `Prec.highest(EditorView.domEventHandlers({ keydown }))` handler plus `handlePaneKeydown` fallback and a `Percent` toolbar button in `src/lib/components/EditorPane.svelte` using CodeMirror's `toggleLineComment` (`commentTokens: { line: "%" }`) so `% `-commented lines and selections are excluded from LaTeX compilation (and stripped in browser preview PDFs via `buildPreviewPdfBase64`).
+  - Added `tectonic_excludes_percent_commented_lines` integration test in `src-tauri/src/compiler.rs` verifying Tectonic succeeds when invalid macros are `%`-commented and fails when uncommented.
+- **Verified Checks (on merged `main` commit `560a97e2`)**:
+  - `npm run check`: `svelte-check found 0 errors and 0 warnings`, `tsc --noEmit` exited `0`.
+  - `npm run build`: `vite build` succeeded (`4730 modules transformed`, `dist/index.html`, `dist/assets/index-BKxwjx9C.css`, `dist/assets/index-f5b8gexr.js`, `dist/assets/pdf.worker.min-iDqQPrd3.mjs`).
+  - `cd src-tauri && cargo check --all-targets && cargo test -- --nocapture`: exited `0`, **22 passed; 0 failed** in `bex_latex_studio_lib` (including `compiler::tests::tectonic_excludes_percent_commented_lines`).
+  - Node `v26.13.1` behavioral test (`uiZoom.ts` + `latexComment.ts` + CodeMirror `EditorState`): `ALL_PASSED:14` + `EXACT_WALK_AND_ESCAPES_OK`.
+  - Palette/CSS & no-double-zoom audits: clean (`NO_PALETTE_MATCHES`).
+
 
 
 
