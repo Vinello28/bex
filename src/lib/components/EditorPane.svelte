@@ -64,11 +64,13 @@
     Image,
     Italic,
     List,
+    Percent,
     Save,
     Search,
     Sigma,
     SquareFunction,
   } from "@lucide/svelte";
+  import { isCommentToggleShortcut, toggleLatexComment } from "../latexComment";
   import type { LatexDiagnostic } from "../types";
 
   interface Props {
@@ -148,6 +150,10 @@
   });
 
   const isDark = $derived(theme === "dark" || (theme === "system" && systemDark));
+  const isMac =
+    typeof navigator !== "undefined" &&
+    /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent);
+  const modKey = isMac ? "⌘" : "Ctrl+";
 
   const latexLanguage = StreamLanguage.define(stex);
 
@@ -509,6 +515,18 @@
         EditorView.lineWrapping,
         flashLineField,
         Prec.highest(
+          EditorView.domEventHandlers({
+            keydown(event, targetView) {
+              if (isCommentToggleShortcut(event)) {
+                if (filePath === null) return false;
+                event.preventDefault();
+                return toggleLatexComment(targetView);
+              }
+              return false;
+            },
+          })
+        ),
+        Prec.highest(
           keymap.of([
             {
               key: "Mod-s",
@@ -612,6 +630,12 @@
     view.focus();
   }
 
+  function triggerToggleComment(): void {
+    if (!view || filePath === null) return;
+    toggleLatexComment(view);
+    view.focus();
+  }
+
   function triggerSearch(): void {
     if (!view || filePath === null) return;
     openSearchPanel(view);
@@ -640,6 +664,10 @@
         if (!filePath || !synctexAvailable) return;
         event.preventDefault();
         triggerSyncToPdf();
+      } else if (isCommentToggleShortcut(event)) {
+        if (!filePath) return;
+        event.preventDefault();
+        triggerToggleComment();
       }
     }
   }
@@ -821,6 +849,16 @@
       >
         <Heading size={15} aria-hidden="true" />
       </button>
+      <button
+        type="button"
+        class="tool-btn"
+        title={`Toggle Comment (${modKey}ù / ${modKey}/)`}
+        aria-label="Toggle LaTeX comment"
+        disabled={!filePath}
+        onclick={triggerToggleComment}
+      >
+        <Percent size={15} aria-hidden="true" />
+      </button>
 
       <span class="tool-sep" aria-hidden="true"></span>
 
@@ -920,7 +958,7 @@
       <span class="status-item">LaTeX</span>
     </div>
     <div class="status-right">
-      <span class="status-hint">Cmd/Ctrl + S to Save &amp; Compile</span>
+      <span class="status-hint">{modKey}ù Comment • {modKey}S Save &amp; Compile</span>
     </div>
   </footer>
 </section>
@@ -999,8 +1037,8 @@
     align-items: center;
     justify-content: center;
     gap: 4px;
-    height: 26px;
-    min-width: 26px;
+    min-height: 26px;
+    min-width: 28px;
     padding: 0 6px;
     border: 1px solid transparent;
     border-radius: 5px;
