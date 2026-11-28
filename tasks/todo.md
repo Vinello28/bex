@@ -274,3 +274,25 @@
 
 
 
+
+---
+
+## Step 12: GitHub Pages Site ("Paper LaTeX" style) — subagent-driven
+Spec: `docs/superpowers/specs/2026-11-28-github-pages-site-design.md` · Plan: `docs/superpowers/plans/2026-11-28-github-pages-site.md`
+- [x] **Task 1 (screenshots)**: real app v0.3.9 via WebView2 CDP (`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=…`) — editor, errors, AI (LM Studio `openai/gpt-oss-20b`, real `insert_text` tool call), home × light/dark × 1x/2x + `og-image.png`; user localStorage backed up/restored (hash-verified ×2), demo data deleted
+- [x] **Task 2 (fonts)**: Latin Modern 2.004 subset → 6 WOFF2 (127 KB total) + GUST license + provenance README (`site/assets/fonts/`)
+- [x] **Task 3 (download.js)**: pure asset/OS/model functions + DOM applier, `node --test "tests/site/*.test.mjs"` (15/15)
+- [x] **Task 4 (deploy)**: `.github/workflows/pages.yml` (Actions → Pages, `site/`) + README link
+- [x] **Task 5 (page)**: `site/index.html` + `site/assets/css/style.css`
+- [x] **Task 6 (integration)**: final captions, `/bex/`-style sub-path test, 320–1920px light/dark, API-failure fallback (JS on and off), blue audit, final whole-branch review + fix wave
+
+### Step 12 Verification Summary
+- **Page (`site/`)**: LaTeX-article look (Latin Modern, `\maketitle` block, Abstract, numbered sections via CSS counters, booktabs tables, "Figure n:" captions, bibliography-style References); light `#ffffff/#111111` + accent `#7a3e0c`, dark `#000000/#e8e8e8` + accent `#e0a040`; zero blue hues (grep clean); all URLs relative; real small caps from the LM Roman Caps family; ⌘/⇧ via kbd font fallback.
+- **Downloads (`site/assets/js/download.js`)**: GitHub latest-release API → per-OS primary button (macOS "Apple Silicon only", Windows `-setup.exe`, Linux AppImage; iPad/Android/iOS → "See all downloads") + 6-row table with sizes; 5 s timeout, 10-min `sessionStorage` cache; every link falls back to `releases/latest` (verified with the API blocked and with JS off).
+- **Copy facts**: every claim checked against `src/` and the live v0.3.9 release (shortcuts, update flow with separate restart, AI providers, compiler detection, last-good-PDF on failure, Edge/SmartScreen + macOS quarantine steps).
+- **Verified checks**:
+  - `node --test "tests/site/*.test.mjs"`: **15 passed, 0 failed**.
+  - Chrome via local server on a sub-path: no page-level horizontal overflow at 320/375/414/768/1024/1280/1920 px; all 5 font faces + all figures load; 0 broken anchors; console clean; light and dark themes and 375px mobile inspected visually.
+  - Reviews: per-task reviews (T2, T3, T4 approved; T5 one fix round) + final whole-branch review (opus) → one fix wave (Edge download warning, Intel-Mac notice, `w`-descriptor `srcset`, copy-button a11y, footnote/accessible-name fixes, font provenance) + scoped re-review.
+- **Deploy (manual, one-time)**: repo Settings → Pages → Source: **GitHub Actions**, then merge/push to `main` (or run the workflow via `workflow_dispatch`).
+- **App issues found while capturing (not fixed, outside scope)**: diagnostics parser misattributes errors inside `\input{x}` without `.tex` (the app's own templates use that form); one typo yields 4 issues (duplicate + 2 generic engine lines); with the AI pane open at 1440px the editor/PDF toolbars overflow and the AI pane can be dragged below its min width; the light editor theme colours LaTeX commands blue.

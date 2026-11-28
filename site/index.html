@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bex LaTeX Studio — a LaTeX editor with the TeX engine built in</title>
+<meta name="description" content="Bex LaTeX Studio is a free desktop LaTeX editor for macOS, Windows and Linux. The TeX engine is built in, so there is no TeX distribution to install, and the PDF updates beside your source every time you save.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="assets/img/bex-bottle.svg" type="image/svg+xml">
+<link rel="canonical" href="https://vinello28.github.io/bex/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Bex LaTeX Studio">
+<meta property="og:title" content="Bex LaTeX Studio — a LaTeX editor with the TeX engine built in">
+<meta property="og:description" content="A free desktop LaTeX editor for macOS, Windows and Linux. No TeX distribution to install; live PDF preview.">
+<meta property="og:url" content="https://vinello28.github.io/bex/">
+<meta property="og:image" content="https://vinello28.github.io/bex/assets/img/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Bex LaTeX Studio with a paper open: the LaTeX source in the editor and the compiled PDF side by side.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Bex LaTeX Studio — a LaTeX editor with the TeX engine built in">
+<meta name="twitter:description" content="A free desktop LaTeX editor for macOS, Windows and Linux. No TeX distribution to install; live PDF preview.">
+<meta name="twitter:image" content="https://vinello28.github.io/bex/assets/img/og-image.png">
+<meta name="twitter:image:alt" content="Bex LaTeX Studio with a paper open: the LaTeX source in the editor and the compiled PDF side by side.">
+
+<link rel="preload" href="assets/fonts/lm-roman-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/css/style.css">
+<script type="module" src="assets/js/download.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="titleblock">
+  <img class="mascot" src="assets/img/bex-bottle.svg" width="56" height="56" alt="">
+  <h1>Bex LaTeX Studio</h1>
+  <p class="subtitle">A desktop LaTeX editor with the TeX engine built in</p>
+  <p class="dateline"><span class="release"><span data-release="version">latest release</span><span data-release="date"></span></span><span class="sep"> ·&nbsp;</span><span class="platforms">macOS ·&nbsp;Windows ·&nbsp;Linux</span></p>
+</header>
+
+<main id="main">
+
+<section class="abstract" aria-label="Abstract">
+  <p><strong>Abstract.</strong> Bex LaTeX Studio is a desktop editor for writing papers, theses and other documents in LaTeX. The TeX engine is built into the app, so there is no TeX distribution to install and configure: download it, open a folder, and compile. Every time you save, the document is compiled and the PDF beside your source is updated. Bex is free and runs on macOS, Windows and Linux.</p>
+</section>
+
+<div class="primary">
+  <a id="primary-download" class="button" href="https://github.com/Vinello28/bex/releases/latest"><span data-primary-label>Download</span> <span data-primary-note>Latest release on GitHub</span></a>
+  <p class="other"><a href="#download">Other platforms ↓</a></p>
+</div>
+
+<nav class="toc" aria-labelledby="toc-title">
+  <h2 id="toc-title">Contents</h2>
+  <ol>
+    <li><a href="#download">Download</a></li>
+    <li><a href="#installation">Installation</a>
+      <ol>
+        <li><a href="#install-macos">macOS</a></li>
+        <li><a href="#install-windows">Windows</a></li>
+        <li><a href="#install-linux">Linux</a></li>
+        <li><a href="#updates">Updates</a></li>
+      </ol>
+    </li>
+    <li><a href="#getting-started">Getting started</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#shortcuts">Keyboard shortcuts</a></li>
+  </ol>
+  <p class="toc-refs"><a href="#references">References</a></p>
+</nav>
+
+<section id="download" class="sec" aria-labelledby="download-title">
+  <h2 id="download-title">Download</h2>
+  <p><a href="#tab-downloads">Table 1</a> lists the installers for the latest release. If you are not sure which one to pick, take the first file listed for your operating system.</p>
+
+  <div class="table-wrap">
+    <table class="booktabs downloads" id="tab-downloads">
+      <caption>Table 1: Installers for the latest release.</caption>
+      <thead>
+        <tr><th scope="col">Platform</th><th scope="col">Package</th><th scope="col" class="num">Size</th><th scope="col">Link</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">macOS</th>
+          <td>Disk image <code>.dmg</code><sup><a class="fnmark" href="#fn-mac" id="fnref-mac" aria-label="Note a">a</a></sup></td>
+          <td class="num"><span data-asset-size="mac-dmg">–</span></td>
+          <td><a data-asset="mac-dmg" href="https://github.com/Vinello28/bex/releases/latest">Download<span class="vh"> the macOS disk image</span></a></td>
+        </tr>
+        <tr>
+          <th scope="row">Windows</th>
+          <td>Installer <code>.exe</code> <em class="rec">recommended</em></td>
+          <td class="num"><span data-asset-size="win-exe">–</span></td>
+          <td><a data-asset="win-exe" href="https://github.com/Vinello28/bex/releases/latest">Download<span class="vh"> the Windows installer (.exe)</span></a></td>
+        </tr>
+        <tr>
+          <th scope="row">Windows</th>
+          <td>MSI package <code>.msi</code></td>
+          <td class="num"><span data-asset-size="win-msi">–</span></td>
+          <td><a data-asset="win-msi" href="https://github.com/Vinello28/bex/releases/latest">Download<span class="vh"> the Windows MSI package</span></a></td>
+        </tr>
+        <tr>
+          <th scope="row">Linux</th>
+          <td>AppImage <code>.AppImage</code></td>
+          <td class="num"><span data-asset-size="linux-appimage">–</span></td>
+          <td><a data-asset="linux-appimage" href="https://github.com/Vinello28/bex/releases/latest">Download<span class="vh"> the Linux AppImage</span></a></td>
+        </tr>
+        <tr>
+          <th scope="row">Linux</th>
+          <td>Debian, Ubuntu <code>.deb</code></td>
+          <td class="num"><span data-asset-size="linux-deb">–</span></td>
+          <td><a data-asset="linux-deb" href="https://github.com/Vinello28/bex/releases/latest">Download<span class="vh"> the Debian/Ubuntu package</span></a></td>
+        </tr>
+        <tr>
+          <th scope="row">Linux</th>
+          <td>Fedora, RHEL <code>.rpm</code></td>
+          <td class="num"><span data-asset-size="linux-rpm">–</span></td>
+          <td><a data-asset="linux-rpm" href="https://github.com/Vinello28/bex/releases/latest">Download<span class="vh"> the Fedora/RHEL package</span></a></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="tablenote" id="fn-mac"><sup>a</sup> For Macs with Apple Silicon only; see <a href="#install-macos">Section 2.1</a>. <a href="#fnref-mac" aria-label="Back to the table">↑</a></p>
+  <p>Older versions and release notes are on the <a href="https://github.com/Vinello28/bex/releases">releases page</a> <a class="cite" href="#ref-2">[2]</a>.</p>
+</section>
+
+<section id="installation" class="sec" aria-labelledby="installation-title">
+  <h2 id="installation-title">Installation</h2>
+  <p>The apps are not notarized by Apple and not code-signed for Windows, so both systems ask for one extra confirmation the first time. This is expected, and the steps below take a minute.</p>
+
+  <section id="install-macos" class="subsec" aria-labelledby="install-macos-title">
+    <h3 id="install-macos-title">macOS</h3>
+    <p>Bex needs a Mac with Apple Silicon (M1 or later); there is no Intel build.</p>
+    <p>Open the <code>.dmg</code> and drag Bex LaTeX Studio into the Applications folder. Because the app is not notarized by Apple, macOS blocks it on first launch; run this once in Terminal to clear the block:</p>
+    <div class="code" data-copy><pre><code>xattr -dr com.apple.quarantine "/Applications/Bex LaTeX Studio.app"</code></pre></div>
+    <p>From then on Bex opens like any other app.</p>
+  </section>
+
+  <section id="install-windows" class="subsec" aria-labelledby="install-windows-title">
+    <h3 id="install-windows-title">Windows</h3>
+    <p>If your browser warns that the file isn’t commonly downloaded, keep it: in Edge, choose <em>…</em> → <em>Keep</em> → <em>Show more</em> → <em>Keep anyway</em>. Then run the <code>.exe</code> installer. If Windows SmartScreen says it protected your PC, choose <em>More info</em>, then <em>Run anyway</em>. The <code>.msi</code> package installs the same app and is meant for machines where MSI is preferred.</p>
+  </section>
+
+  <section id="install-linux" class="subsec" aria-labelledby="install-linux-title">
+    <h3 id="install-linux-title">Linux</h3>
+    <p>Run the commands from the folder you downloaded the file to. For the AppImage, make the file executable and start it:</p>
+    <div class="code" data-copy><pre><code>chmod +x Bex.LaTeX.Studio_*_amd64.AppImage
+./Bex.LaTeX.Studio_*_amd64.AppImage</code></pre></div>
+    <p>On Debian or Ubuntu:</p>
+    <div class="code" data-copy><pre><code>sudo apt install ./Bex.LaTeX.Studio_*_amd64.deb</code></pre></div>
+    <p>On Fedora or RHEL:</p>
+    <div class="code" data-copy><pre><code>sudo dnf install ./Bex.LaTeX.Studio-*.x86_64.rpm</code></pre></div>
+  </section>
+
+  <section id="updates" class="subsec" aria-labelledby="updates-title">
+    <h3 id="updates-title">Updates</h3>
+    <p>You only need to come here once. Bex checks for a new version each time it starts and tells you when one is available; one click downloads and installs it, and a restart switches to the new version.</p>
+  </section>
+</section>
+
+<section id="getting-started" class="sec" aria-labelledby="getting-started-title">
+  <h2 id="getting-started-title">Getting started</h2>
+  <ol class="steps">
+    <li>Launch Bex LaTeX Studio. It opens on the Home screen (<a href="#fig-home">Figure 4</a>).</li>
+    <li>Choose <em>New Project</em> to start a new document, <em>Open Directory</em> to work on an existing folder of <code>.tex</code> files, or <em>Sample Project</em> to try a ready-made example.</li>
+    <li>Write your document in the editor.</li>
+    <li>Press <kbd>Ctrl+S</kbd> (<kbd>⌘S</kbd> on macOS). The file is saved and compiled, and the PDF on the right is updated.</li>
+    <li>Double-click anywhere in the PDF to jump to the line of source that produced it.</li>
+  </ol>
+  <p class="note"><span class="sc">Note.</span> The first compile downloads the LaTeX packages your document needs, so it requires an internet connection and takes longer than usual. Later compiles reuse them.</p>
+</section>
+
+<section id="features" class="sec" aria-labelledby="features-title">
+  <h2 id="features-title">Features</h2>
+
+  <p class="para"><strong>Built-in TeX engine.</strong> Bex compiles with Tectonic <a class="cite" href="#ref-4">[4]</a>, which ships inside the app. You do not need TeX Live or MiKTeX: packages are fetched automatically the first time a document uses them. If pdfLaTeX, XeLaTeX or LuaLaTeX is already installed on your computer, Bex detects it and you can select it in Settings instead.</p>
+
+  <p class="para"><strong>Live PDF preview.</strong> Each save compiles the document and refreshes the PDF next to the source, keeping your place in it (<a href="#fig-editor">Figure 1</a>).</p>
+
+  <figure id="fig-editor">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/img/editor-dark.webp 1440w, assets/img/editor-dark@2x.webp 2880w" sizes="(min-width: 1172px) 1140px, calc(100vw - 32px)">
+      <img src="assets/img/editor-light.webp" srcset="assets/img/editor-light.webp 1440w, assets/img/editor-light@2x.webp 2880w" sizes="(min-width: 1172px) 1140px, calc(100vw - 32px)" width="1440" height="900" alt="Bex LaTeX Studio with a three-page paper open: the project files on the left, main.tex with the title, authors and abstract in the editor, and the compiled PDF on the right showing the title, the abstract, Section 1 and the start of Section 2 with equation (1).">
+    </picture>
+    <figcaption><span class="fig-label">Figure 1:</span> A multi-file paper in the editor, with the compiled PDF beside the source.</figcaption>
+  </figure>
+
+  <p class="para"><strong>Source and PDF in sync.</strong> Double-click a point in the PDF (or <kbd>Ctrl</kbd>/<kbd>⌘</kbd>-click it) to jump to the source line that produced it. In the other direction, <kbd>Ctrl+Shift+J</kbd> (<kbd>⌘⇧J</kbd>) shows where the line under the cursor ends up in the PDF.</p>
+
+  <p class="para"><strong>Errors you can find.</strong> Errors and warnings from the compiler are gathered in an <em>Issues</em> panel in the preview; click one to jump to the reported line. If a compile fails, the last good PDF stays on screen (<a href="#fig-errors">Figure 2</a>).</p>
+
+  <figure id="fig-errors">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/img/errors-dark.webp 1440w, assets/img/errors-dark@2x.webp 2880w" sizes="(min-width: 1172px) 1140px, calc(100vw - 32px)">
+      <img src="assets/img/errors-light.webp" srcset="assets/img/errors-light.webp 1440w, assets/img/errors-light@2x.webp 2880w" sizes="(min-width: 1172px) 1140px, calc(100vw - 32px)" width="1440" height="900" loading="lazy" alt="A compile error in Bex LaTeX Studio: the Issues panel lists an undefined control sequence at line 43 of sections/experiments.tex, the misspelled command is underlined in the editor, and the preview still shows the last good PDF with the Experiments section and its table.">
+    </picture>
+    <figcaption><span class="fig-label">Figure 2:</span> The Issues panel lists an undefined control sequence in <code>sections/experiments.tex</code>; the last good PDF stays on screen.</figcaption>
+  </figure>
+
+  <p class="para"><strong>AI assistant (optional).</strong> A sidebar assistant can answer questions about your document and read, edit and create files in your project (<a href="#fig-assistant">Figure 3</a>). It works with Google AI Studio, using your own API key, or with a model running on your own computer through Ollama, LM Studio, vLLM or any OpenAI-compatible server. Bex is fully usable without it.</p>
+
+  <figure id="fig-assistant">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/img/assistant-dark.webp 1440w, assets/img/assistant-dark@2x.webp 2880w" sizes="(min-width: 1172px) 1140px, calc(100vw - 32px)">
+      <img src="assets/img/assistant-light.webp" srcset="assets/img/assistant-light.webp 1440w, assets/img/assistant-light@2x.webp 2880w" sizes="(min-width: 1172px) 1140px, calc(100vw - 32px)" width="1440" height="900" loading="lazy" alt="The AI assistant sidebar in Bex LaTeX Studio, connected to a local model through LM Studio. Asked to add a short limitations paragraph to the conclusion, it inserts the text into sections/conclusion.tex, shown in an expanded tool-call block, and answers in one sentence; the document has recompiled and the new paragraph appears in the editor and on page 3 of the PDF.">
+    </picture>
+    <figcaption><span class="fig-label">Figure 3:</span> The assistant, running a local model through LM Studio, adds a limitations paragraph to the conclusion and the document recompiles.</figcaption>
+  </figure>
+
+  <p class="para"><strong>Home screen.</strong> Recent projects and files are one click away and can be searched; new projects, folders and the sample project start from the same screen (<a href="#fig-home">Figure 4</a>).</p>
+
+  <figure id="fig-home">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/img/home-dark.webp 1440w, assets/img/home-dark@2x.webp 2880w" sizes="(min-width: 1172px) 1140px, calc(100vw - 32px)">
+      <img src="assets/img/home-light.webp" srcset="assets/img/home-light.webp 1440w, assets/img/home-light@2x.webp 2880w" sizes="(min-width: 1172px) 1140px, calc(100vw - 32px)" width="1440" height="900" loading="lazy" alt="The Bex LaTeX Studio Home screen: a search field and the New Project, Open Directory and Sample Project actions at the top, three recent projects in the Papers folder, and six recent files below them.">
+    </picture>
+    <figcaption><span class="fig-label">Figure 4:</span> The Home screen, with recent projects and files.</figcaption>
+  </figure>
+
+  <p class="para"><strong>Comfortable to work in.</strong> Light and dark themes, an adjustable interface scale, and a shortcut to comment or uncomment lines with <code>%</code>.</p>
+
+  <p class="para"><strong>Automatic updates.</strong> The app looks for new versions itself and installs them when you ask it to (<a href="#updates">Section 2.4</a>).</p>
+</section>
+
+<section id="shortcuts" class="sec" aria-labelledby="shortcuts-title">
+  <h2 id="shortcuts-title">Keyboard shortcuts</h2>
+  <p><a href="#tab-shortcuts">Table 2</a> lists the main shortcuts. The app shows most of them under <em>Settings → About Bex</em>.</p>
+
+  <div class="table-wrap">
+    <table class="booktabs shortcuts" id="tab-shortcuts">
+      <caption>Table 2: Keyboard shortcuts.</caption>
+      <thead>
+        <tr><th scope="col">Action</th><th scope="col">macOS</th><th scope="col">Windows, Linux</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">Save and compile</th><td><kbd>⌘S</kbd></td><td><kbd>Ctrl+S</kbd></td></tr>
+        <tr><th scope="row">Toggle file sidebar</th><td><kbd>⌘B</kbd></td><td><kbd>Ctrl+B</kbd></td></tr>
+        <tr><th scope="row">Toggle AI sidebar</th><td><kbd>⌘⇧A</kbd></td><td><kbd>Ctrl+Shift+A</kbd></td></tr>
+        <tr><th scope="row">Sync editor to PDF</th><td><kbd>⌘⇧J</kbd></td><td><kbd>Ctrl+Shift+J</kbd></td></tr>
+        <tr><th scope="row">Jump from PDF to source</th><td>double-click, or <kbd>⌘</kbd>-click</td><td>double-click, or <kbd>Ctrl</kbd>-click</td></tr>
+        <tr><th scope="row">Toggle comment</th><td><kbd>⌘ù</kbd> or <kbd>⌘/</kbd></td><td><kbd>Ctrl+ù</kbd> or <kbd>Ctrl+/</kbd></td></tr>
+        <tr><th scope="row">Interface zoom in, out</th><td><kbd>⌘+</kbd>, <kbd>⌘−</kbd></td><td><kbd>Ctrl++</kbd>, <kbd>Ctrl+−</kbd></td></tr>
+        <tr><th scope="row">Reset interface zoom</th><td><kbd>⌘0</kbd></td><td><kbd>Ctrl+0</kbd></td></tr>
+        <tr><th scope="row">Settings</th><td><kbd>⌘,</kbd></td><td><kbd>Ctrl+,</kbd></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="references" class="refs" aria-labelledby="references-title">
+  <h2 id="references-title">References</h2>
+  <ol class="bib">
+    <li id="ref-1"><span class="bib-label">[1]</span> Bex LaTeX Studio. <em>Source code.</em> <a href="https://github.com/Vinello28/bex">https://github.com/Vinello28/bex</a></li>
+    <li id="ref-2"><span class="bib-label">[2]</span> Bex LaTeX Studio. <em>All releases.</em> <a href="https://github.com/Vinello28/bex/releases">https://github.com/Vinello28/bex/releases</a></li>
+    <li id="ref-3"><span class="bib-label">[3]</span> Bex LaTeX Studio. <em>Issue tracker.</em> <a href="https://github.com/Vinello28/bex/issues">https://github.com/Vinello28/bex/issues</a></li>
+    <li id="ref-4"><span class="bib-label">[4]</span> The Tectonic Project. <em>Tectonic: a modernized, complete, self-contained TeX/LaTeX engine.</em> <a href="https://tectonic-typesetting.github.io/">https://tectonic-typesetting.github.io/</a></li>
+  </ol>
+</section>
+
+</main>
+
+<footer class="colophon">
+  <p>Bex LaTeX Studio · <a href="https://github.com/Vinello28/bex">source on GitHub</a> · <a href="https://github.com/Vinello28/bex/issues">report an issue</a></p>
+</footer>
+</body>
+</html>

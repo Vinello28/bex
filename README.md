@@ -1,5 +1,7 @@
 # Bex LaTeX Studio
 
+**Website & downloads:** https://vinello28.github.io/bex/
+
 A cross-platform live LaTeX editor built with **Tauri v2**, **Svelte 5**, and **Rust**, featuring an embedded **Tectonic** typesetting engine alongside optional external `pdflatex`, `xelatex`, and `lualatex` support.
 
 ## Local Development Prerequisites

@@ -7,3 +7,7 @@
 ## Branding & App Icons
 - Ensure the main mascot/object fills the icon canvas prominently (around 80–85% of the viewBox width/height) so it reads clearly at small sizes (`28px` header icon, `32px` taskbar/dock icon) instead of rendering a skinny silhouette inside an oversized background card.
 - Follow explicit brand references faithfully: use Homebrew-style warm golden-amber beer and overflowing foam (not green glass) paired with big expressive cartoon eyes ("occhioni") when crafting the Bex mascot.
+
+## Ownership of Deliverables (Don't Hand Work Back)
+- When a deliverable needs assets (screenshots, sample data, real outputs), produce them yourself: launch/install the app, drive it, capture it. Never propose "the user supplies them" as the recommended option — the user delegates precisely to avoid doing the work.
+- Before asking the user to do something manual, check whether it can be done from this machine (installed release, WebView2/CDP remote debugging, local services like LM Studio). Only ask for what truly requires them (credentials, physical access, decisions).

@@ -1,0 +1,658 @@
+/* Bex LaTeX Studio: a single page typeset like a LaTeX article. */
+
+/* ---------- Fonts (Latin Modern, GUST Font License) ---------- */
+@font-face {
+  font-family: "LM Roman";
+  src: url("../fonts/lm-roman-regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "LM Roman";
+  src: url("../fonts/lm-roman-italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "LM Roman";
+  src: url("../fonts/lm-roman-bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "LM Roman";
+  src: url("../fonts/lm-roman-bolditalic.woff2") format("woff2");
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+/* Caps font: its lowercase glyphs are the real small capitals. */
+@font-face {
+  font-family: "LM Roman Caps";
+  src: url("../fonts/lm-roman-caps.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "LM Mono";
+  src: url("../fonts/lm-mono-regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------- Tokens ---------- */
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --ink: #111111;
+  --secondary: #555555;
+  --hairline: #d6d6d6;
+  --code-bg: #f5f5f4;
+  --accent: #7a3e0c;
+
+  --serif: "LM Roman", "Latin Modern Roman", "Computer Modern", Georgia, serif;
+  --caps: "LM Roman Caps", "LM Roman", "Latin Modern Roman", Georgia, serif;
+  /* LM Mono has no ⌘ or ⇧: the later families supply them. */
+  --mono: "LM Mono", ui-monospace, "Cascadia Mono", "Segoe UI Symbol", monospace;
+
+  --measure: 37em;
+  --gutter: 16px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000;
+    --ink: #e8e8e8;
+    --secondary: #9a9a9a;
+    --hairline: #2a2a2a;
+    --code-bg: #121212;
+    --accent: #e0a040;
+  }
+}
+
+/* ---------- Base ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 17px;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  /* Lets figures size against the viewport minus any scrollbar (cqw). */
+  container-type: inline-size;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 1rem;
+  line-height: 1.45;
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures;
+  font-variant-numeric: oldstyle-nums;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+.titleblock,
+main,
+.colophon {
+  width: min(var(--measure), 100% - 2 * var(--gutter));
+  margin-inline: auto;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+a:hover {
+  text-decoration-color: currentColor;
+}
+
+p {
+  margin: 0;
+}
+/* LaTeX paragraphs: indented, no space between, none after a heading. */
+main p + p {
+  text-indent: 1.5em;
+}
+
+strong {
+  font-weight: 700;
+}
+
+.sc {
+  font-family: var(--caps);
+  font-style: normal;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+
+code,
+kbd {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  font-variant-numeric: lining-nums;
+}
+code {
+  overflow-wrap: anywhere;
+}
+kbd {
+  white-space: nowrap;
+}
+
+sup {
+  font-size: 0.7em;
+  line-height: 0;
+  font-variant-numeric: lining-nums;
+}
+
+.vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--gutter);
+  top: -10em;
+  padding: 0.3em 0.6em;
+  background: var(--bg);
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  text-decoration: none;
+  z-index: 1;
+}
+.skip-link:focus {
+  top: var(--gutter);
+}
+
+/* ---------- \maketitle ---------- */
+.titleblock {
+  padding-top: 3.2em;
+  text-align: center;
+  text-wrap: balance;
+}
+.mascot {
+  display: block;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 1.1em;
+}
+.titleblock h1 {
+  margin: 0;
+  font-size: 1.728em; /* \LARGE */
+  font-weight: 400;
+  line-height: 1.2;
+}
+.subtitle {
+  margin-top: 1.1em;
+  font-size: 1.2em; /* \large */
+}
+.dateline {
+  margin-top: 0.5em;
+  font-size: 1.05em;
+  color: var(--ink);
+}
+/* No-JS text reads "Latest release"; once loaded it becomes "Version 0.3.9 · 26 November 2026". */
+.dateline .release,
+.dateline .platforms,
+.dateline [data-release="date"] {
+  white-space: nowrap;
+}
+.dateline [data-release="version"] {
+  display: inline-block;
+}
+.dateline [data-release="version"]::first-letter {
+  text-transform: uppercase;
+}
+.dateline .release:has([data-release="date"]:not(:empty)) [data-release="version"]::before {
+  content: "Version ";
+}
+/* The no-break space binds each "·" to the item after it, so no line ends in a separator. */
+[data-release="date"]:not(:empty)::before {
+  content: " \00b7\00a0";
+  white-space: normal;
+}
+/* Narrow screens: platforms on their own line, without the leading separator. */
+@media (max-width: 40em) {
+  .dateline .sep {
+    display: none;
+  }
+  .dateline .platforms {
+    display: block;
+  }
+}
+/* Very narrow screens: let long version and date values break before the "·". */
+@media (max-width: 30em) {
+  .dateline {
+    font-size: 0.95em;
+  }
+  .button {
+    text-wrap: balance;
+  }
+  .dateline .release {
+    white-space: normal;
+  }
+}
+
+/* ---------- Abstract ---------- */
+.abstract {
+  margin: 2.4em 1em 0;
+  font-size: 0.9em; /* \small */
+}
+
+/* ---------- Primary download ---------- */
+.primary {
+  margin-top: 2em;
+  text-align: center;
+}
+.button {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1em;
+  max-width: 100%;
+  padding: 0.5em 1.6em 0.55em;
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  background: var(--bg);
+  color: var(--ink);
+  text-decoration: none;
+  line-height: 1.25;
+}
+.button [data-primary-label] {
+  font-family: var(--caps);
+  font-size: 1.12em;
+  letter-spacing: 0.05em;
+}
+.button [data-primary-note] {
+  font-size: 0.8em;
+  color: var(--secondary);
+}
+.button:hover {
+  background: var(--ink);
+  color: var(--bg);
+}
+.button:hover [data-primary-note] {
+  color: var(--bg);
+}
+.button:focus-visible {
+  outline-offset: 3px;
+}
+.primary .other {
+  margin-top: 0.7em;
+  font-size: 0.9em;
+}
+
+/* ---------- Headings and section numbers ---------- */
+main {
+  counter-reset: sec;
+}
+h2,
+h3 {
+  font-weight: 700;
+  line-height: 1.25;
+  font-variant-numeric: lining-nums;
+  text-align: left;
+  hyphens: manual;
+}
+h2 {
+  margin: 2.2em 0 0.75em;
+  font-size: 1.44em; /* \Large */
+}
+h3 {
+  margin: 1.6em 0 0.5em;
+  font-size: 1.2em; /* \large */
+}
+.sec {
+  counter-increment: sec;
+  counter-reset: sub;
+}
+.subsec {
+  counter-increment: sub;
+}
+.sec > h2,
+.subsec > h3 {
+  display: flex;
+  gap: 1em; /* \quad between number and title */
+}
+.sec > h2::before {
+  content: counter(sec);
+  flex: none;
+}
+.subsec > h3::before {
+  content: counter(sec) "." counter(sub);
+  flex: none;
+}
+
+/* ---------- \tableofcontents ---------- */
+.toc ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: toc;
+}
+.toc li {
+  counter-increment: toc;
+}
+.toc > ol > li {
+  margin-top: 0.45em;
+  font-weight: 700;
+}
+.toc li ol {
+  margin-top: 0.1em;
+  padding-left: 1.5em;
+  font-weight: 400;
+}
+.toc li::before {
+  display: inline-block;
+  min-width: 1.5em;
+  content: counters(toc, ".");
+  font-variant-numeric: lining-nums;
+}
+.toc li li::before {
+  min-width: 2.3em;
+}
+.toc a,
+.toc-refs a {
+  color: var(--ink);
+  text-decoration: none;
+}
+.toc a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.toc-refs {
+  margin-top: 0.45em;
+  font-weight: 700;
+}
+
+/* ---------- Lists, paragraphs ---------- */
+.steps {
+  margin: 0.6em 0;
+  padding-left: 1.6em;
+}
+.steps li + li {
+  margin-top: 0.3em;
+}
+.steps li::marker {
+  font-variant-numeric: lining-nums;
+}
+.note {
+  margin-top: 0.8em;
+}
+p.para {
+  margin-top: 0.9em;
+  text-indent: 0;
+}
+.sec > h2 + p.para {
+  margin-top: 0;
+}
+.subsec + p,
+.code + p,
+.table-wrap + p,
+.tablenote + p,
+figure + p {
+  text-indent: 0;
+}
+.code + p,
+.tablenote + p {
+  margin-top: 0.6em;
+}
+
+/* ---------- Code blocks ---------- */
+.code {
+  position: relative;
+  margin: 0.8em 0;
+  background: var(--code-bg);
+}
+.code pre {
+  margin: 0;
+  padding: 0.75em 0.9em;
+  overflow-x: auto;
+  font-size: 0.85em;
+  line-height: 1.5;
+}
+/* Room above the first line for the Copy button, so it never covers a command. */
+.code:has(.copy) pre {
+  padding-top: 2.3em;
+}
+.code pre code {
+  font-size: 1em;
+  overflow-wrap: normal;
+  white-space: pre;
+}
+.copy {
+  position: absolute;
+  top: 0.4em;
+  right: 0.45em;
+  padding: 0.1em 0.5em 0.15em;
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  background: var(--code-bg);
+  color: var(--secondary);
+  font-family: var(--caps);
+  font-size: 0.8em;
+  letter-spacing: 0.05em;
+  line-height: 1.3;
+  cursor: pointer;
+}
+.copy:hover {
+  border-color: currentColor;
+  color: var(--accent);
+}
+
+/* ---------- booktabs tables ---------- */
+.table-wrap {
+  position: relative; /* contains the visually hidden link text */
+  max-width: 100%;
+  margin: 1.2em 0 0.6em;
+  overflow-x: auto;
+}
+table.booktabs {
+  margin: 0 auto;
+  border-collapse: collapse;
+  border-top: 1.5px solid var(--ink);
+  border-bottom: 1.5px solid var(--ink);
+  font-variant-numeric: lining-nums tabular-nums;
+  line-height: 1.3;
+}
+table.booktabs caption {
+  caption-side: top;
+  padding-bottom: 0.6em;
+  font-variant-numeric: oldstyle-nums;
+  text-align: center;
+}
+table.booktabs th,
+table.booktabs td {
+  padding: 0.32em 0.6em;
+  text-align: left;
+  vertical-align: baseline;
+}
+table.booktabs th:first-child,
+table.booktabs td:first-child {
+  padding-left: 0.3em;
+}
+table.booktabs th:last-child,
+table.booktabs td:last-child {
+  padding-right: 0.3em;
+}
+table.booktabs thead th {
+  padding-top: 0.45em;
+  font-weight: 700;
+  border-bottom: 0.75px solid var(--ink);
+}
+table.booktabs tbody tr:first-child > * {
+  padding-top: 0.5em;
+}
+table.booktabs tbody tr:last-child > * {
+  padding-bottom: 0.5em;
+}
+table.booktabs tbody th {
+  font-weight: 400;
+}
+table.booktabs .num {
+  text-align: right;
+  white-space: nowrap;
+}
+table.booktabs code {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+.downloads td:last-child {
+  white-space: nowrap;
+}
+.rec {
+  font-size: 0.9em;
+  color: var(--secondary);
+}
+.tablenote {
+  font-size: 0.85em;
+  color: var(--ink);
+}
+
+/* ---------- Figures ---------- */
+figure {
+  --fig: min(60em, 100cqw - 2 * var(--gutter));
+  width: var(--fig);
+  margin: 1.6em calc((100% - var(--fig)) / 2);
+}
+figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--hairline);
+}
+figcaption {
+  max-width: var(--measure);
+  margin: 0.7em auto 0;
+  text-align: center;
+}
+
+/* ---------- References ---------- */
+.bib {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.bib li {
+  position: relative;
+  padding-left: 2.2em;
+}
+.bib li + li {
+  margin-top: 0.4em;
+}
+.bib-label {
+  position: absolute;
+  left: 0;
+  font-variant-numeric: lining-nums;
+}
+/* URLs set in typewriter, as LaTeX's url package does. */
+.bib a {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+a.cite {
+  font-variant-numeric: lining-nums;
+}
+
+/* ---------- Foot of the page ---------- */
+.colophon {
+  margin-top: 4em;
+  padding-bottom: 3em;
+  font-size: 0.85em;
+  color: var(--secondary);
+  text-align: center;
+}
+.colophon a {
+  white-space: nowrap;
+}
+
+/* ---------- Narrow screens ---------- */
+@media (max-width: 30em) {
+  .abstract {
+    margin-inline: 0;
+  }
+  table.booktabs {
+    font-size: 0.85em;
+  }
+  table.booktabs th,
+  table.booktabs td {
+    padding-inline: 0.3em;
+  }
+  table.booktabs th:first-child,
+  table.booktabs td:first-child {
+    padding-left: 0;
+  }
+  table.booktabs th:last-child,
+  table.booktabs td:last-child {
+    padding-right: 0.25em; /* room for the focus ring inside the scroll box */
+  }
+  .table-wrap a:focus-visible {
+    outline-offset: 0;
+  }
+}
+
+/* ---------- Wider screens: justified like the printed page ---------- */
+@media (min-width: 44em) {
+  html {
+    font-size: 19px;
+  }
+  .titleblock {
+    padding-top: 4.5em;
+  }
+  .abstract {
+    margin-inline: 2.5em;
+  }
+  main p,
+  .steps li {
+    text-align: justify;
+    -webkit-hyphens: auto;
+    hyphens: auto;
+  }
+  .primary p,
+  figcaption {
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
